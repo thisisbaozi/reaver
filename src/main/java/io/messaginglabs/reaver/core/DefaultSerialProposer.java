@@ -2,15 +2,12 @@ package io.messaginglabs.reaver.core;
 
 import io.messaginglabs.reaver.config.Config;
 import io.messaginglabs.reaver.config.Configs;
-import io.messaginglabs.reaver.dsl.Commit;
 import io.messaginglabs.reaver.dsl.CommitStage;
 import io.messaginglabs.reaver.group.GroupEnv;
 import io.messaginglabs.reaver.group.MultiPaxosGroup;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -24,12 +21,13 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
 
     private final int id;
     private final GroupEnv env;
-    private final List<ValueCommit> buf;
+    private final List<GenericCommit> buf;
     private final ProposalContext ctx;
     private Sequencer sequencer;
     private State state;
 
     private Configs configs;
+    private InstanceCache cache;
 
     /*
      * hooks
@@ -54,20 +52,16 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
         this.state = State.FREE;
     }
 
-    @Override public ValueCommit commit() {
-        return null;
-    }
-
     @Override public State state() {
         return null;
     }
 
-    @Override public List<ValueCommit> newBatch() {
+    @Override public List<GenericCommit> newBatch() {
         return null;
     }
 
     @Override
-    public void commit(List<ValueCommit> batch) {
+    public void commit(List<GenericCommit> batch) {
         Objects.requireNonNull(batch, "batch");
 
         if (batch.isEmpty()) {
@@ -93,11 +87,13 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
         ProposalContext ctx = newProposal(batch);
         ctx.stage(CommitStage.READY);
 
-        /*
-         * should we slow down?
-         */
         if (!proposeRightNow()) {
             delay();
+
+            /*
+             * statistics and add events if necessary
+             */
+
             return ;
         }
 
@@ -109,11 +105,11 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
             /*
              * nothing need to prepare
              */
-            // if (env.debug) {
+            if (env.debug) {
                 throw new IllegalStateException(
                     String.format("nothing need to prepare for proposer(%s)", toString())
                 );
-            // }
+            }
 
             return ;
         }
@@ -200,6 +196,11 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
             return true;
         }
 
+        /*
+         * slow down if:
+         *
+         * 0. too many chosen values in cache(Applier is too slow)
+         */
         boolean result = false;
         try {
             result = beforePropose.apply(ctx);
@@ -208,12 +209,16 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
              * a bug?
              */
             logger.error("caught unknown exception while invoking before prepare hook", cause);
+
+            if (isDebug()) {
+                System.exit(-1);
+            }
         }
 
         return result;
     }
 
-    private ProposalContext newProposal(List<ValueCommit> batch) {
+    private ProposalContext newProposal(List<GenericCommit> batch) {
         /*
          * find a sequence number for a new proposal, must ensure that
          * no proposal associated with the new sequence.
@@ -225,16 +230,6 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
     @Override
     public void observe(State state, Consumer<SerialProposer> consumer) {
 
-    }
-
-    @Override
-    public Commit commit(ByteBuffer value) {
-        return null;
-    }
-
-    @Override
-    public ExecutorService executor() {
-        return null;
     }
 
     @Override

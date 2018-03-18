@@ -1,6 +1,4 @@
 package io.messaginglabs.reaver.dsl;
 
-public interface Proposal {
-
-
+public interface GroupMember {
 }

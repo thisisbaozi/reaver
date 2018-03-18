@@ -3,7 +3,7 @@ package io.messaginglabs.reaver.core;
 import java.util.List;
 import java.util.function.Consumer;
 
-public interface SerialProposer extends Proposer {
+public interface SerialProposer extends Voter {
 
     enum State {
         FREE,
@@ -12,19 +12,13 @@ public interface SerialProposer extends Proposer {
     }
 
     /**
-     * Returns the commit this proposer is processing
-     */
-    ValueCommit commit();
-
-    /**
      * Returns the state this proposer is, FREE means it's able to propose
      * a new commit, otherwise, an exception will be raised
      */
     State state();
+    List<GenericCommit> newBatch();
 
-    List<ValueCommit> newBatch();
-
-    void commit(List<ValueCommit> batch);
+    void commit(List<GenericCommit> batch);
 
     void observe(State state, Consumer<SerialProposer> consumer);
 

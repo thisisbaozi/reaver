@@ -1,6 +1,6 @@
 package io.messaginglabs.reaver.config;
 
-import io.messaginglabs.reaver.com.Message;
+import io.messaginglabs.reaver.com.msg.Message;
 import java.util.Objects;
 
 public class PaxosGroupConfigs implements Configs {

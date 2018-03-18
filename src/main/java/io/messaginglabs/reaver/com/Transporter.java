@@ -1,5 +1,6 @@
 package io.messaginglabs.reaver.com;
 
+import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.config.Node;
 import java.io.Closeable;
 import java.util.concurrent.TimeUnit;

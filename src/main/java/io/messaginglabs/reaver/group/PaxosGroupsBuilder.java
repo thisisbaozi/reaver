@@ -1,7 +1,7 @@
 package io.messaginglabs.reaver.group;
 
 import io.messaginglabs.reaver.com.DefaultServerConnector;
-import io.messaginglabs.reaver.com.Message;
+import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.com.NettyTransporter;
 import io.messaginglabs.reaver.com.ServerConnector;
 import io.messaginglabs.reaver.com.Transporter;
@@ -259,7 +259,7 @@ public class PaxosGroupsBuilder implements GroupsBuilder {
     public void dispatch(Message msg) {
         Objects.requireNonNull(msg, "msg");
 
-        PaxosGroup group = groupsCache.get(msg.getId());
+        PaxosGroup group = groupsCache.get(msg.getGroupId());
         if (group == null) {
             /*
              * todo: throws a exception or just logging ?

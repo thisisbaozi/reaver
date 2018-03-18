@@ -1,7 +1,10 @@
 package io.messaginglabs.reaver.group;
 
-import io.messaginglabs.reaver.com.Message;
+import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.config.ConfigControl;
+import io.messaginglabs.reaver.config.Node;
+import io.messaginglabs.reaver.core.Acceptor;
+import io.messaginglabs.reaver.core.Learner;
 import io.messaginglabs.reaver.core.ParallelProposer;
 import io.messaginglabs.reaver.core.Proposer;
 import io.messaginglabs.reaver.dsl.ClosedGroupException;
@@ -28,6 +31,8 @@ public class MultiPaxosGroup implements PaxosGroup {
      * algorithm participants
      */
     private Proposer proposer;
+    private Acceptor acceptor;
+    private Learner localLearner;
 
     public MultiPaxosGroup(int id, GroupEnv env, GroupOptions options) {
         this.env = Objects.requireNonNull(env, "env");
@@ -57,6 +62,14 @@ public class MultiPaxosGroup implements PaxosGroup {
     @Override
     public void start() {
 
+    }
+
+    @Override public void boot() {
+
+    }
+
+    @Override public Node local() {
+        return null;
     }
 
     private void initParticipants() {

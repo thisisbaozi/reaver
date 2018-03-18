@@ -20,11 +20,12 @@ public class ParallelProposer extends AbstractVoter implements Proposer {
 
     private static final Logger logger = LoggerFactory.getLogger(ParallelProposer.class);
 
-    private final Queue<ValueCommit> values;
+    private final Queue<GenericCommit> values;
     private final int cacheCapacity;
     private final int maxBatchSize;
 
     private final SerialProposer[] proposers;
+    private GenericCommit reserved = null;
 
     public ParallelProposer(int cacheCapacity, int maxBatchSize, int parallel) {
         if (cacheCapacity <= 0) {
@@ -53,6 +54,7 @@ public class ParallelProposer extends AbstractVoter implements Proposer {
              */
             proposeRightNow();
         };
+
         for (int i = 0; i < parallel; i++) {
             this.proposers[i] = new DefaultSerialProposer(i, group().env());
             this.proposers[i].observe(SerialProposer.State.FREE, consumer);
@@ -61,7 +63,7 @@ public class ParallelProposer extends AbstractVoter implements Proposer {
 
     @Override
     public Commit commit(ByteBuffer value) {
-        ValueCommit commit = newCommit(value);
+        GenericCommit commit = newCommit(value);
 
         boolean result = values.offer(commit);
         if (!result) {
@@ -80,7 +82,7 @@ public class ParallelProposer extends AbstractVoter implements Proposer {
                     break;
                 }
 
-                ValueCommit predecessor = values.poll();
+                GenericCommit predecessor = values.poll();
                 if (predecessor == null) {
                     continue;
                 }
@@ -106,7 +108,8 @@ public class ParallelProposer extends AbstractVoter implements Proposer {
     }
 
     private boolean proposeRightNow() {
-        ExecutorService executor = executor();
+        ExecutorService executor = group().env().executor;
+
         try {
             executor.execute(proposeTask);
         } catch (RejectedExecutionException cause) {
@@ -129,11 +132,7 @@ public class ParallelProposer extends AbstractVoter implements Proposer {
     private final Runnable proposeTask = this::propose;
 
     private void propose() {
-        for (;;) {
-            if (values.isEmpty()) {
-                return;
-            }
-
+        while (!values.isEmpty()) {
             SerialProposer proposer = find();
             if (proposer == null) {
                 /*
@@ -157,45 +156,86 @@ public class ParallelProposer extends AbstractVoter implements Proposer {
     }
 
     private void process(SerialProposer proposer) {
+        Objects.requireNonNull(proposer, "proposer");
+
         if (proposer.state() != SerialProposer.State.FREE) {
             throw new IllegalStateException(
                 String.format("buggy, proposer(%s) of group(%s) is not free", proposer.toString(), group().id())
             );
         }
 
-        // batch and propose
+        if (values.isEmpty()) {
+            throw new IllegalStateException("no commits in buffer");
+        }
+
         int bytes = 0;
-        List<ValueCommit> newBatch = proposer.newBatch();
+        List<GenericCommit> batch = proposer.newBatch();
         for (;;) {
-            ValueCommit commit = values.poll();
-            if (commit.isCancelled()) {
-                /*
-                 * ignore it if a commit has been cancelled
-                 */
-                logger.info("a commit({}) posted to group({}) is cancelled, ignore it", commit.toString(), group().id());
+            GenericCommit commit;
+            if (reserved != null) {
+                commit = reserved;
+                reserved = null;
+            } else {
+                commit = values.poll();
+            }
+
+            if (isIgnore(commit)) {
                 continue;
             }
 
-            if (commit.isDone()) {
-                logger.info("a commit({}) posted to group({}) is done, ignore it", commit.toString(), group().id());
+            if (!commit.markNotCancellable()) {
+                assert (commit.isCancelled());
                 continue;
+            }
+
+            if (!inBatch(commit) || commit.getValueSize() + bytes >= maxBatchSize) {
+                if (batch.isEmpty()) {
+                    batch.add(commit);
+                } else {
+                    /*
+                     * reserve this one in next round
+                     */
+                    assert (reserved == null);
+                    reserved = commit;
+                }
+
+                break;
             }
 
             /*
              * now, cancelling is not supported
              */
-            commit.markNotCancellable();
-            newBatch.add(commit);
-
+            batch.add(commit);
             bytes += commit.getValueSize();
-            if (bytes >= maxBatchSize) {
-                break;
-            }
         }
 
-        if (!newBatch.isEmpty()) {
-            proposer.commit(newBatch);
+        if (!batch.isEmpty()) {
+            proposer.commit(batch);
         }
+    }
+
+    private boolean inBatch(GenericCommit commit) {
+        /*
+         * There's only Value type can be proposed in batch.
+         */
+        return commit.type() == CommitType.VALUE;
+    }
+
+    private boolean isIgnore(GenericCommit commit) {
+        if (commit.isCancelled()) {
+            /*
+             * ignore it if a commit has been cancelled
+             */
+            logger.info("a commit({}) posted to group({}) is cancelled, ignore it", commit.toString(), group().id());
+            return true;
+        }
+
+        if (commit.isDone()) {
+            logger.info("a commit({}) posted to group({}) is done, ignore it", commit.toString(), group().id());
+            return true;
+        }
+
+        return false;
     }
 
     private String dumpProposersState() {
@@ -218,19 +258,14 @@ public class ParallelProposer extends AbstractVoter implements Proposer {
         return buf;
     }
 
-    private ValueCommit newCommit(ByteBuffer value) {
+    private GenericCommit newCommit(ByteBuffer value) {
         Objects.requireNonNull(value, "value");
 
         if (!value.hasRemaining()) {
             throw new IllegalArgumentException("empty value is not allowed");
         }
 
-        return new ValueCommit(executor(), copyValue(value));
-    }
-
-    @Override
-    public ExecutorService executor() {
-        return null;
+        return new GenericCommit(null, copyValue(value));
     }
 
     @Override

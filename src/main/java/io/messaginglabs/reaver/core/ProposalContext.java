@@ -7,11 +7,11 @@ public class ProposalContext {
 
     private long begin;
     private long sequence;
-    private List<ValueCommit> batch;
+    private List<GenericCommit> batch;
     private int delayed = 0;
     private CommitStage stage;
 
-    public void reset(long sequence, List<ValueCommit> batch) {
+    public void reset(long sequence, List<GenericCommit> batch) {
         this.sequence = sequence;
         this.batch = batch;
         this.begin = System.currentTimeMillis();

@@ -1,5 +1,6 @@
 package io.messaginglabs.reaver.com;
 
+import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.utils.RefCounted;
 
 public class RemoteServer extends RefCounted implements Server {
@@ -16,4 +17,10 @@ public class RemoteServer extends RefCounted implements Server {
     protected void deallocate() {
 
     }
+
+    @Override
+    public boolean join(Node node) {
+        return false;
+    }
+
 }

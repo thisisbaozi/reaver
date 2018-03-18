@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 
-public class ValueCommit implements Commit {
+public class GenericCommit implements Commit {
 
     private final ExecutorService executor;
     private final ByteBuf value;
@@ -21,7 +21,9 @@ public class ValueCommit implements Commit {
      */
     private CommitResult result;
 
-    public ValueCommit(ExecutorService executor, ByteBuf value) {
+    private CommitType type;
+
+    public GenericCommit(ExecutorService executor, ByteBuf value) {
         this.executor = executor;
         this.value = value;
     }
@@ -34,8 +36,8 @@ public class ValueCommit implements Commit {
 
     }
 
-    public void markNotCancellable() {
-
+    public boolean markNotCancellable() {
+return false;
     }
 
     @Override public long begin() {
@@ -77,5 +79,9 @@ public class ValueCommit implements Commit {
     @Override
     public Proposal get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
         return null;
+    }
+
+    public CommitType type() {
+        return type;
     }
 }

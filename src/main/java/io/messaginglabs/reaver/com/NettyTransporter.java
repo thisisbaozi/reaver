@@ -1,5 +1,6 @@
 package io.messaginglabs.reaver.com;
 
+import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.utils.Parameters;
 import java.io.IOException;
