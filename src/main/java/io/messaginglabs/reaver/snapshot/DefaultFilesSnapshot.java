@@ -1,4 +1,4 @@
 package io.messaginglabs.reaver.snapshot;
 
-public class SnapshotBuilder {
+public class DefaultFilesSnapshot {
 }

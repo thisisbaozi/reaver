@@ -3,7 +3,7 @@ package io.messaginglabs.reaver.config;
 import io.messaginglabs.reaver.com.msg.Message;
 import java.util.Objects;
 
-public class PaxosGroupConfigs implements Configs {
+public class PaxosGroupConfigs implements GroupConfigs {
 
     @Override
     public void apply(Message.Join msg) {
@@ -13,7 +13,7 @@ public class PaxosGroupConfigs implements Configs {
     }
 
     @Override
-    public Config get(long sequence) {
+    public Config find(long sequence) {
         if (sequence < 0) {
             throw new IllegalArgumentException("invalid sequence: " + sequence);
         }

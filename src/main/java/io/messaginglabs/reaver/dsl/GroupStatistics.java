@@ -1,4 +1,5 @@
 package io.messaginglabs.reaver.dsl;
 
-public class GroupStatistics {
+public interface GroupStatistics {
+
 }

@@ -1,8 +1,9 @@
 package io.messaginglabs.reaver.core;
 
 import io.messaginglabs.reaver.config.Config;
-import io.messaginglabs.reaver.config.Configs;
-import io.messaginglabs.reaver.dsl.CommitStage;
+import io.messaginglabs.reaver.config.GroupConfigs;
+import io.messaginglabs.reaver.dsl.Commit;
+import io.messaginglabs.reaver.dsl.CommitResult;
 import io.messaginglabs.reaver.group.GroupEnv;
 import io.messaginglabs.reaver.group.MultiPaxosGroup;
 import java.util.ArrayList;
@@ -26,7 +27,7 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
     private Sequencer sequencer;
     private State state;
 
-    private Configs configs;
+    private GroupConfigs configs;
     private InstanceCache cache;
 
     /*
@@ -84,8 +85,10 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
          */
         this.state = State.PROPOSING;
 
-        ProposalContext ctx = newProposal(batch);
-        ctx.stage(CommitStage.READY);
+        if (!newProposal(batch)) {
+            fail(batch);
+            return ;
+        }
 
         if (!proposeRightNow()) {
             delay();
@@ -97,40 +100,30 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
             return ;
         }
 
-        prepare();
+        doPropose();
     }
 
-    private void prepare() {
-        if (state == State.FREE) {
-            /*
-             * nothing need to prepare
-             */
-            if (env.debug) {
+    private void fail(List<GenericCommit> commits) {
+        Objects.requireNonNull(commits, "commits");
+
+        /*
+         * statistics and trace
+         */
+
+        for (GenericCommit commit : commits) {
+            if (commit.isCancelled() || commit.isDone()) {
                 throw new IllegalStateException(
-                    String.format("nothing need to prepare for proposer(%s)", toString())
+                    String.format("can't mark a commit(%s) that has been done", commit.toString())
                 );
             }
 
-            return ;
+            commit.setFailure(CommitResult.NO_CONFIG);
         }
 
-        CommitStage stage = ctx.stage();
-        if (stage != CommitStage.PREPARE) {
-            throw new IllegalStateException(
-                String.format("buggy, commit's stage(%s) is not PREPARE, proposer(%s)", stage.name(), toString())
-            );
-        }
+        state = State.FREE;
+    }
 
-        /*
-         * finds a config based on the sequence number
-         */
-        Config config = configs.get(ctx.sequence());
-        if (config == null) {
-            throw new IllegalStateException(
-                String.format("buggy, can't find config works for sequence(%d), proposer(%s)", ctx.sequence(), toString())
-            );
-        }
-
+    private void doPropose() {
 
     }
 
@@ -157,7 +150,7 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
     /*
      * for reducing memory footprint
      */
-    private final Runnable prepareRunner = this::prepare;
+    private final Runnable prepareRunner = this::doPropose;
 
     private void delay() {
         if (logger.isDebugEnabled()) {
@@ -218,13 +211,26 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
         return result;
     }
 
-    private ProposalContext newProposal(List<GenericCommit> batch) {
+    private boolean newProposal(List<GenericCommit> batch) {
         /*
          * find a sequence number for a new proposal, must ensure that
          * no proposal associated with the new sequence.
          */
-        ctx.reset(sequencer.next(), batch);
-        return ctx;
+        long instanceId = sequencer.next();
+
+        /*
+         * find a config for this batch
+         */
+        Config config = find(instanceId);
+        if (config == null) {
+            /*
+             * no config, refuse this batch
+             */
+            return false;
+        }
+
+        ctx.reset(instanceId, batch, config);
+        return true;
     }
 
     @Override

@@ -2,6 +2,7 @@ package io.messaginglabs.reaver.group;
 
 import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.config.ConfigControl;
+import io.messaginglabs.reaver.config.GroupConfigs;
 import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.core.Acceptor;
 import io.messaginglabs.reaver.core.Learner;
@@ -9,6 +10,7 @@ import io.messaginglabs.reaver.core.ParallelProposer;
 import io.messaginglabs.reaver.core.Proposer;
 import io.messaginglabs.reaver.dsl.ClosedGroupException;
 import io.messaginglabs.reaver.dsl.Commit;
+import io.messaginglabs.reaver.dsl.CommitResult;
 import io.messaginglabs.reaver.dsl.FrozenGroupException;
 import io.messaginglabs.reaver.dsl.GroupState;
 import io.messaginglabs.reaver.dsl.GroupStatistics;
@@ -101,6 +103,10 @@ public class MultiPaxosGroup implements PaxosGroup {
         return proposer.commit(value);
     }
 
+    @Override public CommitResult commit(ByteBuffer value, Object att) {
+        return null;
+    }
+
     @Override
     public ConfigControl config() {
         return null;
@@ -128,6 +134,10 @@ public class MultiPaxosGroup implements PaxosGroup {
 
     public GroupEnv env() {
         return env;
+    }
+
+    @Override public GroupConfigs configs() {
+        return null;
     }
 
     public boolean slowDown() {

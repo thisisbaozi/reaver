@@ -2,8 +2,6 @@ package io.messaginglabs.reaver.core;
 
 import io.messaginglabs.reaver.dsl.Commit;
 import io.messaginglabs.reaver.dsl.CommitResult;
-import io.messaginglabs.reaver.dsl.CommitStage;
-import io.messaginglabs.reaver.dsl.Proposal;
 import io.netty.buffer.ByteBuf;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -40,26 +38,6 @@ public class GenericCommit implements Commit {
 return false;
     }
 
-    @Override public long begin() {
-        return 0;
-    }
-
-    @Override public long proposed() {
-        return 0;
-    }
-
-    @Override public long resolved() {
-        return 0;
-    }
-
-    @Override public long learned() {
-        return 0;
-    }
-
-    @Override public void observe(CommitStage stage, Consumer<Proposal> consumer) {
-
-    }
-
     @Override public boolean cancel(boolean mayInterruptIfRunning) {
         return false;
     }
@@ -72,16 +50,30 @@ return false;
         return false;
     }
 
-    @Override public Proposal get() throws InterruptedException, ExecutionException {
+    @Override public CommitResult get() throws InterruptedException, ExecutionException {
         return null;
     }
 
-    @Override
-    public Proposal get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
+    @Override public CommitResult get(long timeout,
+        TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
         return null;
     }
 
     public CommitType type() {
         return type;
+    }
+
+    @Override public long instanceId() {
+        return 0;
+    }
+
+    @Override
+    public void addListener(Consumer<CommitResult> consumer) {
+
+    }
+
+    @Override
+    public void addListener(Commit.Stage stage, Consumer<Commit> consumer) {
+
     }
 }

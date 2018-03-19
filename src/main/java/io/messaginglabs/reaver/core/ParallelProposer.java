@@ -184,7 +184,10 @@ public class ParallelProposer extends AbstractVoter implements Proposer {
             }
 
             if (!commit.markNotCancellable()) {
-                assert (commit.isCancelled());
+                if (!commit.isCancelled()) {
+                    throw new IllegalStateException(String.format("commit(%s) is not cancelled", commit.toString()));
+                }
+
                 continue;
             }
 
@@ -193,7 +196,7 @@ public class ParallelProposer extends AbstractVoter implements Proposer {
                     batch.add(commit);
                 } else {
                     /*
-                     * reserve this one in next round
+                     * reserve it for proposing in next round
                      */
                     assert (reserved == null);
                     reserved = commit;
@@ -207,6 +210,10 @@ public class ParallelProposer extends AbstractVoter implements Proposer {
              */
             batch.add(commit);
             bytes += commit.getValueSize();
+
+            /*
+             * todo: statistics and trace
+             */
         }
 
         if (!batch.isEmpty()) {
