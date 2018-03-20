@@ -1,6 +1,7 @@
 package io.messaginglabs.reaver.config;
 
 import io.messaginglabs.reaver.com.Server;
+import io.messaginglabs.reaver.dsl.ConfigControl;
 import io.messaginglabs.reaver.group.PaxosGroup;
 import java.util.List;
 import java.util.Objects;
@@ -20,6 +21,10 @@ public class GroupConfigControl implements ConfigControl {
     @Override
     public ConfigView view() {
         return null;
+    }
+
+    @Override public void follow(List<Node> nodes) {
+
     }
 
     @Override

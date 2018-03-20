@@ -1,9 +1,12 @@
 package io.messaginglabs.reaver.config;
 
+import io.messaginglabs.reaver.utils.AddressUtils;
+
 public class Node {
 
     private String ip;
     private int port;
+    private volatile long id = 0;
 
     public String getIp() {
         return ip;
@@ -19,6 +22,13 @@ public class Node {
 
     public void setPort(int port) {
         this.port = port;
+    }
+
+    public long id() {
+        if (id == 0) {
+            id = AddressUtils.composite(ip, port);
+        }
+        return id;
     }
 
     @Override

@@ -5,8 +5,11 @@ import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.com.NettyTransporter;
 import io.messaginglabs.reaver.com.ServerConnector;
 import io.messaginglabs.reaver.com.Transporter;
+import io.messaginglabs.reaver.dsl.ElectionPolicy;
 import io.messaginglabs.reaver.dsl.Group;
 import io.messaginglabs.reaver.dsl.GroupsBuilder;
+import io.messaginglabs.reaver.dsl.LeaderSelector;
+import io.messaginglabs.reaver.dsl.StateMachine;
 import io.messaginglabs.reaver.log.DefaultLogStorage;
 import io.messaginglabs.reaver.log.LogStorage;
 import io.messaginglabs.reaver.utils.Parameters;
@@ -103,6 +106,16 @@ public class PaxosGroupsBuilder implements GroupsBuilder {
     }
 
     @Override
+    public void setElectionPolicy(ElectionPolicy policy) {
+        options.policy = policy;
+    }
+
+    @Override
+    public void setLeaderSelector(LeaderSelector selector) {
+        options.selector = selector;
+    }
+
+    @Override
     public void setLeaderProposeOnly(boolean enable) {
         options.leaderProposeOnly = enable;
     }
@@ -153,7 +166,7 @@ public class PaxosGroupsBuilder implements GroupsBuilder {
             // Creates a group
             GroupEnv env = initEnv(debug, exclusiveExecutor, path);
 
-            // Do not check the given id is duplicated or not.
+            // Do not GroupState the given id is duplicated or not.
             PaxosGroup newGroup = new MultiPaxosGroup(id, env, options);
             groupsCache.put(id, newGroup);
 
@@ -198,7 +211,7 @@ public class PaxosGroupsBuilder implements GroupsBuilder {
     }
 
     private void init() throws Exception {
-        // check
+        // GroupState
         Parameters.checkNotEmpty(localAddress, "localAddress");
         Parameters.checkNotEmpty(path, "path");
 

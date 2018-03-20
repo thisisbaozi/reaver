@@ -1,11 +1,14 @@
 package io.messaginglabs.reaver.config;
 
-import java.util.List;
+import io.messaginglabs.reaver.com.msg.Message;
 
-public class Config {
+public interface Config {
 
+    /**
+     * Returns node info of this node
+     */
+    Node node();
 
-    private long begin;
-    private List<Node> nodes;
+    int broadcast(Message msg);
 
 }

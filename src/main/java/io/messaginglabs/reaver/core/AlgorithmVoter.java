@@ -3,7 +3,7 @@ package io.messaginglabs.reaver.core;
 import io.messaginglabs.reaver.config.Config;
 import io.messaginglabs.reaver.config.GroupConfigs;
 
-public abstract class AbstractVoter extends AlgorithmParticipant implements Voter {
+public abstract class AlgorithmVoter extends AlgorithmParticipant implements Voter {
 
     @Override
     public Config find(long instanceId) {

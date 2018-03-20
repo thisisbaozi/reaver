@@ -20,6 +20,8 @@ public interface GroupsBuilder {
     void setDir(String path);
 
     /* lease */
+    void setElectionPolicy(ElectionPolicy policy);
+    void setLeaderSelector(LeaderSelector selector);
     void setLeaderProposeOnly(boolean enable);
     void setLeaseDuration(int duration);
 

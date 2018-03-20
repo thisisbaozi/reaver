@@ -10,7 +10,7 @@ import io.messaginglabs.reaver.debug.RunningEvents;
 import io.messaginglabs.reaver.group.MultiPaxosGroup;
 import java.util.Objects;
 
-public class ParallelAcceptor implements Acceptor {
+public class ParallelAcceptor extends AlgorithmVoter implements Acceptor {
 
     private class InstancePromise {
 
@@ -26,38 +26,6 @@ public class ParallelAcceptor implements Acceptor {
 
     @Override
     public AcceptReply process(Accept accept) {
-        return null;
-    }
-
-
-
-    public AcceptReply processAccept(Message.Proposal proposal) {
-        Objects.requireNonNull(proposal, "proposal");
-
-        /*
-         * debug information
-         */
-
-        /*
-         * statistics
-         */
-
-        /*
-         * fail point
-         */
-
-        AcceptReply result = doAccept(proposal);
-
-        /*
-         * fail point
-         */
-
-        return result;
-    }
-
-    private AcceptReply doAccept(Message.Proposal proposal) {
-
-
         return null;
     }
 

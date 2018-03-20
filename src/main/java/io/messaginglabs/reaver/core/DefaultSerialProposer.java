@@ -1,11 +1,12 @@
 package io.messaginglabs.reaver.core;
 
+import io.messaginglabs.reaver.com.msg.Propose;
 import io.messaginglabs.reaver.config.Config;
-import io.messaginglabs.reaver.config.GroupConfigs;
-import io.messaginglabs.reaver.dsl.Commit;
+import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.dsl.CommitResult;
 import io.messaginglabs.reaver.group.GroupEnv;
 import io.messaginglabs.reaver.group.MultiPaxosGroup;
+import io.netty.buffer.ByteBuf;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -16,24 +17,33 @@ import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class DefaultSerialProposer extends AbstractVoter implements SerialProposer {
+public class DefaultSerialProposer extends AlgorithmVoter implements SerialProposer {
 
     private static final Logger logger = LoggerFactory.getLogger(DefaultSerialProposer.class);
 
     private final int id;
     private final GroupEnv env;
-    private final List<GenericCommit> buf;
-    private final ProposalContext ctx;
+
+    @SuppressWarnings("all")
+    private final List<GenericCommit> cache;
+
+    /*
+     * the proposal this proposer is proposing
+     */
+    private final ProposeContext proposal;
+    private AlgorithmPhase phase = AlgorithmPhase.THREE_PHASE;
     private Sequencer sequencer;
     private State state;
 
-    private GroupConfigs configs;
-    private InstanceCache cache;
+    private ByteBuf buffer;
+
+    private Propose propose = new Propose();
+    private long retryTimeout;
 
     /*
      * hooks
      */
-    private Function<ProposalContext, Boolean> beforePropose;
+    private Function<ProposeContext, Boolean> beforePropose;
 
     /*
      * prepare again after delayed period
@@ -47,18 +57,20 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
         /*
          * ArrayList is enough, thread-safe is not necessary
          */
-        this.buf = new ArrayList<>();
-        this.ctx = new ProposalContext();
+        this.cache = new ArrayList<>();
+        this.proposal = new ProposeContext();
 
         this.state = State.FREE;
     }
 
-    @Override public State state() {
-        return null;
+    @Override
+    public State state() {
+        return state;
     }
 
-    @Override public List<GenericCommit> newBatch() {
-        return null;
+    @Override
+    public List<GenericCommit> newBatch() {
+        return cache;
     }
 
     @Override
@@ -76,22 +88,24 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
             );
         }
 
-        if (batch != buf) {
-            throw new IllegalStateException("buggy, batch is not buffer");
+        if (batch != cache) {
+            throw new IllegalStateException("buggy, batch is not the buffer of this proposer");
         }
 
-        /*
-         * now, try to proposal a new proposal containing the given batch
-         */
         this.state = State.PROPOSING;
 
         if (!newProposal(batch)) {
-            fail(batch);
+            try {
+                fail(batch);
+            } finally {
+                this.state = State.FREE;
+            }
+
             return ;
         }
 
         if (!proposeRightNow()) {
-            delay();
+            proposeLater();
 
             /*
              * statistics and add events if necessary
@@ -100,7 +114,7 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
             return ;
         }
 
-        doPropose();
+        propose();
     }
 
     private void fail(List<GenericCommit> commits) {
@@ -119,42 +133,133 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
 
             commit.setFailure(CommitResult.NO_CONFIG);
         }
-
-        state = State.FREE;
     }
 
-    private void doPropose() {
+    private void propose() {
+        /*
+         * 0. serializes proposal to a buffer, and wrap the buffer with a message
+         * 1. broadcasts the message mentioned above
+         * 2. schedules a task for proposing the proposal again once the previous is timeout
+         *    or rejected.
+         */
+        propose(proposal);
+
+        /*
+         * try to propose again if the proposal is not accepted after
+         * a period.
+         */
+        retryAfter(retryTimeout);
+    }
+
+    private void retryAfter(long tiumeout) {
+
+    }
+
+    private void proposeAgain() {
 
     }
 
     private AlgorithmPhase getPhase() {
-        return AlgorithmPhase.THREE_PHASE;
+        if (phase == AlgorithmPhase.THREE_PHASE) {
+            return AlgorithmPhase.THREE_PHASE;
+        }
+
+        return proposal.phase();
     }
 
-    private void broadcast() {
+    private void propose(ProposeContext proposal) {
+        Objects.requireNonNull(proposal, "proposal");
+
         if (getPhase() == AlgorithmPhase.TWO_PHASE) {
-            broadcast2Phase();
+            proposeIn2Phase(proposal);
         } else {
-            broadcast3Phase();
+            proposeIn3Phase(proposal);
         }
     }
 
-    private void broadcast3Phase() {
+    private void validate(ProposeContext proposal) {
+        Objects.requireNonNull(proposal, "proposal");
 
+        Config config = proposal.config();
+        if (config == null) {
+            throw new IllegalStateException(
+                String.format("no config in proposal(%s)", proposal.toString())
+            );
+        }
+
+        Node node = config.node();
+        if (node == null) {
+            throw new IllegalStateException(
+                String.format("buggy, node is null in config(%s)", config.toString())
+            );
+        }
+
+        long instanceId = proposal.instanceId();
+        if (instanceId == -1) {
+            throw new IllegalArgumentException(
+                String.format("instance id is -1, invalid proposal(%s)", proposal.toString())
+            );
+        }
     }
 
-    private void broadcast2Phase() {
+    private void proposeIn2Phase(ProposeContext proposal) {
+        validate(proposal);
 
+        Config config = proposal.config();
+
+        propose.setSequence(0);
+        propose.setNodeId(config.node().id());
+        propose.setGroupId(group().id());
+        propose.setInstanceId(proposal.instanceId());
+        propose.setValue(buffer);
+        propose.setOp(io.messaginglabs.reaver.com.msg.Message.Operation.PROPOSE);
+
+        config.broadcast(propose);
+
+        // add event
+    }
+
+    private void proposeIn3Phase(ProposeContext proposal) {
+        validate(proposal);
+
+        Config config = proposal.config();
+
+        /*
+         * increase sequence if it's necessary
+         */
+        int sequence = propose.getSequence();
+        int maxSequence = proposal.maxPromised().getSequence();
+        if (maxSequence > sequence) {
+            sequence = maxSequence;
+        }
+
+        propose.setSequence(sequence);
+
+        /*
+         * add event
+         */
+
+        propose.setNodeId(config.node().id());
+        propose.setGroupId(group().id());
+        propose.setInstanceId(proposal.instanceId());
+        propose.setValue(buffer);
+        propose.setOp(io.messaginglabs.reaver.com.msg.Message.Operation.PREPARE);
+
+        config.broadcast(propose);
+
+        // add event
+
+        // statistics
     }
 
     /*
      * for reducing memory footprint
      */
-    private final Runnable prepareRunner = this::doPropose;
+    private final Runnable proposeRunner = this::propose;
 
-    private void delay() {
+    private void proposeLater() {
         if (logger.isDebugEnabled()) {
-            logger.info("delay {}ms to prepare proposal({}), proposer({})", delayPeriod, ctx.toString(), toString());
+            logger.info("proposeLater {}ms to prepare proposal({}), proposer({})", delayPeriod, proposal.toString(), toString());
         }
 
         /*
@@ -163,7 +268,7 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
 
         ScheduledExecutorService executor = env.executor;
         try {
-            executor.schedule(prepareRunner, delayPeriod, TimeUnit.MILLISECONDS);
+            executor.schedule(proposeRunner, delayPeriod, TimeUnit.MILLISECONDS);
         } catch (Exception cause) {
             if (executor.isShutdown()) {
                 /*
@@ -174,7 +279,7 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
                 /*
                  * too many tasks?
                  */
-                logger.warn("can't schedule proposing task({}) of proposer({}) due to too many tasks in executor", ctx.toString(), toString());
+                logger.warn("can't schedule proposing task({}) of proposer({}) due to too many tasks in executor", proposal.toString(), toString());
 
                 /*
                  * mark for proposing later
@@ -196,7 +301,7 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
          */
         boolean result = false;
         try {
-            result = beforePropose.apply(ctx);
+            result = beforePropose.apply(proposal);
         } catch (Exception cause) {
             /*
              * a bug?
@@ -229,7 +334,7 @@ public class DefaultSerialProposer extends AbstractVoter implements SerialPropos
             return false;
         }
 
-        ctx.reset(instanceId, batch, config);
+        proposal.reset(instanceId, batch, config);
         return true;
     }
 

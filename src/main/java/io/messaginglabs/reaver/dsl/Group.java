@@ -1,12 +1,25 @@
 package io.messaginglabs.reaver.dsl;
 
-import io.messaginglabs.reaver.config.ConfigControl;
 import java.nio.ByteBuffer;
 import java.util.function.Consumer;
 
 public interface Group {
 
+    enum State {
+        NOT_STARTED,
+        RUNNING,
+        FROZEN,
+        SHUTTING_DOWN,
+        SHUTDOWN
+    }
+
     int id();
+
+    /**
+     * Registers a state machine with this group, the registered state machine
+     * is response for processing chosen values.
+     */
+    void register(StateMachine machine);
 
     /**
      * Commits a value, the commit handle is used to know the result in asynchronous
@@ -22,6 +35,11 @@ public interface Group {
 
     ConfigControl config();
     GroupStatistics statistics();
+
+    /**
+     * Returns the current state of this group
+     */
+    State state();
 
     /**
      * Closes this group, refuses all commits and config control once a group

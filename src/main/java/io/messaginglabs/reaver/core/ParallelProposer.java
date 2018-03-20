@@ -2,6 +2,7 @@ package io.messaginglabs.reaver.core;
 
 import io.messaginglabs.reaver.dsl.Commit;
 import io.messaginglabs.reaver.dsl.CommitResult;
+import io.messaginglabs.reaver.dsl.Group;
 import io.messaginglabs.reaver.group.MultiPaxosGroup;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -16,7 +17,7 @@ import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ParallelProposer extends AbstractVoter implements Proposer {
+public class ParallelProposer extends AlgorithmVoter implements Proposer {
 
     private static final Logger logger = LoggerFactory.getLogger(ParallelProposer.class);
 
@@ -62,9 +63,33 @@ public class ParallelProposer extends AbstractVoter implements Proposer {
     }
 
     @Override
-    public Commit commit(ByteBuffer value) {
-        GenericCommit commit = newCommit(value);
+    public CommitResult commit(ByteBuffer value, Object attachment) {
+        if (group().state() == Group.State.FROZEN) {
+            return CommitResult.FROZEN_GROUP;
+        }
 
+        // wrap value and attachment with a commit
+        GenericCommit commit = newCommit(value, attachment);
+        return enqueue(commit) ? CommitResult.OK : CommitResult.PROPOSE_THROTTLE;
+    }
+
+    @Override
+    public Commit commit(ByteBuffer value) {
+        GenericCommit commit = newCommit(value, null);
+
+        if (group().state() == Group.State.FROZEN) {
+            commit.setFailure(CommitResult.FROZEN_GROUP);
+            return commit;
+        }
+
+        if (!enqueue(commit)) {
+            commit.setFailure(CommitResult.PROPOSE_THROTTLE);
+        }
+
+        return commit;
+    }
+
+    private boolean enqueue(GenericCommit commit) {
         boolean result = values.offer(commit);
         if (!result) {
             /*
@@ -93,18 +118,15 @@ public class ParallelProposer extends AbstractVoter implements Proposer {
                     break;
                 }
             }
+        }
 
-            if (!result) {
-                commit.setFailure(CommitResult.PROPOSE_THROTTLE);
-                return commit;
+        if (result) {
+            if (!proposeRightNow()) {
+                logger.warn("can't execute proposing task in group({}), executor({})", group().id());
             }
         }
 
-        if (!proposeRightNow()) {
-            commit.setFailure(CommitResult.PROPOSE_THROTTLE);
-        }
-
-        return commit;
+        return result;
     }
 
     private boolean proposeRightNow() {
@@ -132,6 +154,8 @@ public class ParallelProposer extends AbstractVoter implements Proposer {
     private final Runnable proposeTask = this::propose;
 
     private void propose() {
+        inLoop();
+
         while (!values.isEmpty()) {
             SerialProposer proposer = find();
             if (proposer == null) {
@@ -223,7 +247,7 @@ public class ParallelProposer extends AbstractVoter implements Proposer {
 
     private boolean inBatch(GenericCommit commit) {
         /*
-         * There's only Value type can be proposed in batch.
+         * There's only Value op can be proposed in batch.
          */
         return commit.type() == CommitType.VALUE;
     }
@@ -265,14 +289,14 @@ public class ParallelProposer extends AbstractVoter implements Proposer {
         return buf;
     }
 
-    private GenericCommit newCommit(ByteBuffer value) {
+    private GenericCommit newCommit(ByteBuffer value, Object attachment) {
         Objects.requireNonNull(value, "value");
 
         if (!value.hasRemaining()) {
             throw new IllegalArgumentException("empty value is not allowed");
         }
 
-        return new GenericCommit(null, copyValue(value));
+        return new GenericCommit(null, copyValue(value), attachment);
     }
 
     @Override

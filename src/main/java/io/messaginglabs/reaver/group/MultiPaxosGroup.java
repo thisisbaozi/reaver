@@ -1,7 +1,7 @@
 package io.messaginglabs.reaver.group;
 
 import io.messaginglabs.reaver.com.msg.Message;
-import io.messaginglabs.reaver.config.ConfigControl;
+import io.messaginglabs.reaver.dsl.ConfigControl;
 import io.messaginglabs.reaver.config.GroupConfigs;
 import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.core.Acceptor;
@@ -12,8 +12,9 @@ import io.messaginglabs.reaver.dsl.ClosedGroupException;
 import io.messaginglabs.reaver.dsl.Commit;
 import io.messaginglabs.reaver.dsl.CommitResult;
 import io.messaginglabs.reaver.dsl.FrozenGroupException;
-import io.messaginglabs.reaver.dsl.GroupState;
+import io.messaginglabs.reaver.dsl.Group;
 import io.messaginglabs.reaver.dsl.GroupStatistics;
+import io.messaginglabs.reaver.dsl.StateMachine;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -26,7 +27,7 @@ public class MultiPaxosGroup implements PaxosGroup {
     private final GroupEnv env;
     private final int id;
 
-    private final GroupState state;
+    private final Group.State state;
     private final GroupOptions options;
 
     /*
@@ -40,7 +41,7 @@ public class MultiPaxosGroup implements PaxosGroup {
         this.env = Objects.requireNonNull(env, "env");
         this.options = Objects.requireNonNull(options, "options");
         this.id = id;
-        this.state = GroupState.NOT_STARTED;
+        this.state = Group.State.NOT_STARTED;
 
         validate();
     }
@@ -51,6 +52,11 @@ public class MultiPaxosGroup implements PaxosGroup {
 
     public int id() {
         return id;
+    }
+
+    @Override
+    public void register(StateMachine machine) {
+
     }
 
     @Override
@@ -66,7 +72,8 @@ public class MultiPaxosGroup implements PaxosGroup {
 
     }
 
-    @Override public void boot() {
+    @Override
+    public void boot() {
 
     }
 
@@ -87,24 +94,39 @@ public class MultiPaxosGroup implements PaxosGroup {
 
     }
 
-    public Commit commit(ByteBuffer value) {
-        if (state == GroupState.NOT_STARTED) {
+    private void checkState(ByteBuffer value) {
+        if (state == Group.State.NOT_STARTED) {
             throw new IllegalArgumentException(String.format("init group(%s) before committing values to it", id));
         }
 
-        if (state == GroupState.FROZEN) {
-            throw new FrozenGroupException(String.format("group(%d) is frozen", id));
-        }
-
-        if (state == GroupState.SHUTTING_DOWN || state == GroupState.SHUTDOWN) {
+        if (state == Group.State.SHUTTING_DOWN || state == Group.State.SHUTDOWN) {
             throw new ClosedGroupException(id + " is shutdown");
         }
 
+        Objects.requireNonNull(value, "value");
+        if (value.remaining() == 0) {
+            throw new IllegalArgumentException("can't commit empty value");
+        }
+
+        /*
+         * checks whether this node is able to commit or not
+         */
+        if (proposer == null) {
+            throw new IllegalStateException(
+                String.format("node(%s) in group(%d) is just a learner", local().toString(), id)
+            );
+        }
+    }
+
+    public Commit commit(ByteBuffer value) {
+        checkState(value);
         return proposer.commit(value);
     }
 
-    @Override public CommitResult commit(ByteBuffer value, Object att) {
-        return null;
+    @Override
+    public CommitResult commit(ByteBuffer value, Object att) {
+        checkState(value);
+        return proposer.commit(value, att);
     }
 
     @Override
@@ -114,6 +136,10 @@ public class MultiPaxosGroup implements PaxosGroup {
 
     @Override
     public GroupStatistics statistics() {
+        return null;
+    }
+
+    @Override public State state() {
         return null;
     }
 

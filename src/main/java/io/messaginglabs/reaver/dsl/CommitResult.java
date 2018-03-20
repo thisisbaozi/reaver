@@ -5,6 +5,7 @@ public enum CommitResult {
     OK,
     PROPOSE_THROTTLE,
     NO_CONFIG,
+    FROZEN_GROUP,
 
     ;
 }

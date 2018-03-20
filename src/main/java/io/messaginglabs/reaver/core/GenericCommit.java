@@ -21,7 +21,7 @@ public class GenericCommit implements Commit {
 
     private CommitType type;
 
-    public GenericCommit(ExecutorService executor, ByteBuf value) {
+    public GenericCommit(ExecutorService executor, ByteBuf value, Object attachment) {
         this.executor = executor;
         this.value = value;
     }
