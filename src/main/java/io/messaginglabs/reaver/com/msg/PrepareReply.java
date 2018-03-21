@@ -2,20 +2,31 @@ package io.messaginglabs.reaver.com.msg;
 
 import io.netty.buffer.ByteBuf;
 
-public class Prepare extends Message {
+public class PrepareReply extends Message {
 
-    private long instanceId;
+    private int proposerId;
 
+    // ballot
     private int sequence;
     private long nodeId;
     private ByteBuf value;
+    private long instanceId;
+    private Operation op;
 
-    public long getInstanceId() {
-        return instanceId;
+    public Operation getOp() {
+        return op;
     }
 
-    public void setInstanceId(long instanceId) {
-        this.instanceId = instanceId;
+    public void setOp(Operation op) {
+        this.op = op;
+    }
+
+    public int getProposerId() {
+        return proposerId;
+    }
+
+    public void setProposerId(int proposerId) {
+        this.proposerId = proposerId;
     }
 
     public int getSequence() {
@@ -34,6 +45,14 @@ public class Prepare extends Message {
         this.nodeId = nodeId;
     }
 
+    public long getInstanceId() {
+        return instanceId;
+    }
+
+    public void setInstanceId(long instanceId) {
+        this.instanceId = instanceId;
+    }
+
     public ByteBuf getValue() {
         return value;
     }
@@ -44,6 +63,6 @@ public class Prepare extends Message {
 
     @Override
     public Operation op() {
-        return Operation.PREPARE;
+        return op;
     }
 }

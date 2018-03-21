@@ -1,13 +1,13 @@
 package io.messaginglabs.reaver.core;
 
-import io.messaginglabs.reaver.com.Accept;
-import io.messaginglabs.reaver.com.AcceptReply;
 import io.messaginglabs.reaver.com.msg.Prepare;
-import io.messaginglabs.reaver.com.PrepareReply;
+import io.messaginglabs.reaver.com.msg.PrepareReply;
+import io.messaginglabs.reaver.com.msg.Propose;
+import io.messaginglabs.reaver.com.msg.ProposeReply;
 
 public interface Acceptor extends Voter {
 
     PrepareReply process(Prepare prepare);
-    AcceptReply process(Accept accept);
+    ProposeReply process(Propose propose);
 
 }

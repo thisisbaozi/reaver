@@ -6,6 +6,18 @@ public abstract class Message {
         PREPARE(1),
         PROPOSE(2),
 
+        PREPARE_REPLY(3),
+        PREPARE_EMPTY_REPLY(4),
+        ACCEPT_REPLY(5),
+
+        // config
+        ADD_NODE(6),
+        REMOVE_NODE(7),
+        FORCE_CONFIG(8),
+
+        // boot
+        UNIFIED_BOOT(9)
+
         ;
 
         public final int value;
@@ -48,10 +60,5 @@ public abstract class Message {
          */
         return Type.NORMAL;
     }
-
-    public class Join {
-
-    }
-
 
 }

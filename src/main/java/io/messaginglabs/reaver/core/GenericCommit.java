@@ -30,6 +30,10 @@ public class GenericCommit implements Commit {
         return value.readableBytes();
     }
 
+    public ByteBuf value() {
+        return value;
+    }
+
     public void setFailure(CommitResult result) {
 
     }

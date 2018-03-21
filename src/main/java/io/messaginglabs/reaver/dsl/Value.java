@@ -12,7 +12,7 @@ public interface Value {
      * change after this calling finished, the state machine shouldn't
      * rely on the value.
      *
-     * You might want to batch a number of values and apply them in bulk, deep
+     * You might want to batch a number of values and process them in bulk, deep
      * copy is a choice.
      */
     ByteBuf get();

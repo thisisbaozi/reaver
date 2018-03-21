@@ -15,6 +15,7 @@ import io.messaginglabs.reaver.dsl.FrozenGroupException;
 import io.messaginglabs.reaver.dsl.Group;
 import io.messaginglabs.reaver.dsl.GroupStatistics;
 import io.messaginglabs.reaver.dsl.StateMachine;
+import io.netty.util.concurrent.ScheduledFuture;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -26,20 +27,25 @@ public class MultiPaxosGroup implements PaxosGroup {
 
     private final GroupEnv env;
     private final int id;
-
-    private final Group.State state;
     private final GroupOptions options;
 
     /*
-     * algorithm participants
+     * indicate the current state of this group
      */
+    private Group.State state;
+
+    // core
+    private GroupConfigs configs;
     private Proposer proposer;
     private Acceptor acceptor;
     private Learner localLearner;
 
+    // tasks
+
     public MultiPaxosGroup(int id, GroupEnv env, GroupOptions options) {
         this.env = Objects.requireNonNull(env, "env");
         this.options = Objects.requireNonNull(options, "options");
+
         this.id = id;
         this.state = Group.State.NOT_STARTED;
 
@@ -47,10 +53,39 @@ public class MultiPaxosGroup implements PaxosGroup {
     }
 
     private void validate() {
+        if (env.phase == null) {
+            throw new IllegalArgumentException("unknown x phase");
+        }
 
+        if (env.applier == null) {
+            env.applier = env.executor;
+        }
+
+        if (env.executor == null) {
+            throw new IllegalArgumentException("no executor");
+        }
+        if (env.executor.isShutdown()) {
+            throw new IllegalArgumentException("closed executor");
+        }
+        if (env.allocator == null) {
+            throw new IllegalArgumentException("no memory allocator");
+        }
+        if (env.codec == null) {
+            throw new IllegalArgumentException("no codec");
+        }
+
+        if (env.connector == null) {
+            throw new IllegalArgumentException("no server connector");
+        }
+        if (env.storage == null) {
+            throw new IllegalArgumentException("no storage");
+        }
+        if (env.transporter == null) {
+            throw new IllegalArgumentException("no transporter");
+        }
     }
 
-    public int id() {
+    public final int id() {
         return id;
     }
 
@@ -72,12 +107,21 @@ public class MultiPaxosGroup implements PaxosGroup {
 
     }
 
+    private void startTasks() {
+        // heartbeat task
+
+        // detect task
+
+        //
+    }
+
     @Override
     public void boot() {
 
     }
 
-    @Override public Node local() {
+    @Override
+    public Node local() {
         return null;
     }
 
@@ -90,9 +134,7 @@ public class MultiPaxosGroup implements PaxosGroup {
         // learner
     }
 
-    private void startTasks() {
 
-    }
 
     private void checkState(ByteBuffer value) {
         if (state == Group.State.NOT_STARTED) {
@@ -172,7 +214,9 @@ public class MultiPaxosGroup implements PaxosGroup {
 
     @Override
     public void process(Message msg) {
+        // check whether this group should process the given message or not
 
+        // dispatch
     }
 
 }

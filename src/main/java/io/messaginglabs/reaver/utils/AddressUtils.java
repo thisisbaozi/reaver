@@ -3,7 +3,7 @@ package io.messaginglabs.reaver.utils;
 public final class AddressUtils {
 
     public static long composite(String ip, int port) {
-        Parameters.checkNotEmpty(ip, "ip");
+        Parameters.requireNotEmpty(ip, "ip");
 
         long value = 0;
         String[] segments = ip.split("\\.");

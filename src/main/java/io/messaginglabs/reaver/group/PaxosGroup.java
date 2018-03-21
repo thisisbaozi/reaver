@@ -18,4 +18,5 @@ public interface PaxosGroup extends Group {
 
     GroupEnv env();
     GroupConfigs configs();
+
 }

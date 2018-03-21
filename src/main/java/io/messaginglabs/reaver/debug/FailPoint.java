@@ -7,7 +7,7 @@ public class FailPoint {
     public final String id;
 
     public FailPoint(String id) {
-        this.id = Parameters.checkNotEmpty(id,"id");
+        this.id = Parameters.requireNotEmpty(id,"id");
     }
 
     public String id() {

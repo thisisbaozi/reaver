@@ -4,6 +4,8 @@ import io.netty.buffer.ByteBuf;
 
 public class Propose extends Message {
 
+    private int proposerId;
+
     /*
      * ProposeContext number
      */
@@ -20,6 +22,14 @@ public class Propose extends Message {
      */
     private ByteBuf value;
     private Operation op;
+
+    public int getProposerId() {
+        return proposerId;
+    }
+
+    public void setProposerId(int proposerId) {
+        this.proposerId = proposerId;
+    }
 
     public int getSequence() {
         return sequence;

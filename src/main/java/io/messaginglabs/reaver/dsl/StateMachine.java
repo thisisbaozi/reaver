@@ -26,7 +26,7 @@ public interface StateMachine {
 
     /**
      * Install the given snapshot to this state machine, this state machine is able
-     * to apply chosen instances in order once the snapshot is installed.
+     * to process chosen instances in order once the snapshot is installed.
      */
     void install(Snapshot snapshot);
 

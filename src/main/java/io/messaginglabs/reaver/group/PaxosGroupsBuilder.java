@@ -9,7 +9,6 @@ import io.messaginglabs.reaver.dsl.ElectionPolicy;
 import io.messaginglabs.reaver.dsl.Group;
 import io.messaginglabs.reaver.dsl.GroupsBuilder;
 import io.messaginglabs.reaver.dsl.LeaderSelector;
-import io.messaginglabs.reaver.dsl.StateMachine;
 import io.messaginglabs.reaver.log.DefaultLogStorage;
 import io.messaginglabs.reaver.log.LogStorage;
 import io.messaginglabs.reaver.utils.Parameters;
@@ -212,8 +211,8 @@ public class PaxosGroupsBuilder implements GroupsBuilder {
 
     private void init() throws Exception {
         // GroupState
-        Parameters.checkNotEmpty(localAddress, "localAddress");
-        Parameters.checkNotEmpty(path, "path");
+        Parameters.requireNotEmpty(localAddress, "localAddress");
+        Parameters.requireNotEmpty(path, "path");
 
         if (port <= 0) {
             throw new IllegalArgumentException("invalid port");

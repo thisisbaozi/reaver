@@ -27,6 +27,7 @@ public class ProposeContext {
     private AlgorithmPhase phase;
     private List<GenericCommit> value;
 
+    private final Ballot proposed = new Ballot();
     private final Ballot maxPromised = new Ballot();
     private final VotersCounter prepareCounter = new VotersCounter();
     private final VotersCounter acceptCounter = new VotersCounter();
@@ -60,4 +61,9 @@ public class ProposeContext {
     public Ballot maxPromised() {
         return maxPromised;
     }
+
+    public VotersCounter acceptCounter() {
+        return acceptCounter;
+    }
+
 }

@@ -2,8 +2,8 @@ package io.messaginglabs.reaver.core;
 
 public class Ballot {
 
-    private int sequence;
-    private long node;
+    protected int sequence;
+    protected long nodeId;
 
     public int getSequence() {
         return sequence;
@@ -13,12 +13,41 @@ public class Ballot {
         this.sequence = sequence;
     }
 
-    public long getNode() {
-        return node;
+    public long getNodeId() {
+        return nodeId;
     }
 
-    public void setNode(long node) {
-        this.node = node;
+    public void setNodeId(long nodeId) {
+        this.nodeId = nodeId;
+    }
+
+    public CompareResult commpare(int sequence, long nodeId) {
+        if (sequence == this.sequence && nodeId == this.nodeId) {
+            return CompareResult.EQUAL;
+        }
+
+        // greater?
+        if (this.sequence > sequence || (this.sequence == sequence && this.nodeId > nodeId)) {
+            return CompareResult.GREATER;
+        }
+
+        return CompareResult.SMALLER;
+    }
+
+    public enum CompareResult {
+        EQUAL, GREATER, SMALLER;
+
+        public boolean isEquals() {
+            return this == EQUAL;
+        }
+
+        public boolean isGreater() {
+            return this == GREATER;
+        }
+
+        public boolean isSmaller() {
+            return this == SMALLER;
+        }
     }
 
     @Override
@@ -30,13 +59,13 @@ public class Ballot {
 
         Ballot ballot = (Ballot)o;
 
-        return sequence == ballot.sequence && node == ballot.node;
+        return sequence == ballot.sequence && nodeId == ballot.nodeId;
     }
 
     @Override
     public int hashCode() {
         int result = sequence;
-        result = 31 * result + (int)(node ^ (node >>> 32));
+        result = 31 * result + (int)(nodeId ^ (nodeId >>> 32));
         return result;
     }
 
@@ -44,7 +73,7 @@ public class Ballot {
     public String toString() {
         return "Ballot{" +
             "sequence=" + sequence +
-            ", node=" + node +
+            ", nodeId=" + nodeId +
             '}';
     }
 }

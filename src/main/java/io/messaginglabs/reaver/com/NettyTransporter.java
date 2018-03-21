@@ -10,7 +10,7 @@ import java.util.function.Consumer;
 public class NettyTransporter implements Transporter {
 
     public NettyTransporter(String address, int port, int threads, String prefix) {
-        Parameters.checkNotEmpty(address, "address");
+        Parameters.requireNotEmpty(address, "address");
 
         if (port <= 0) {
             throw new IllegalArgumentException("invalid port");
