@@ -14,15 +14,12 @@ public interface SerialProposer {
         READY_TO_PREPARE,
     }
 
-    void setDelay(int time);
-    void setProposeBeforeHook(Function<ProposeContext, Boolean> processor);
-
     /**
-     * Returns the state this proposer is, FREE means it's able to propose
-     * a new commit, otherwise, an exception will be raised
+     * Returns true iff this proposer is processing a proposal, otherwise returns
+     * false.
      */
-    State state();
-    List<GenericCommit> newBatch();
+    boolean isBusy();
+    List<GenericCommit> valueCache();
 
     void commit(List<GenericCommit> batch);
     void process(PrepareReply reply);
@@ -30,4 +27,5 @@ public interface SerialProposer {
     void observe(State state, Consumer<SerialProposer> consumer);
 
     void close();
+    boolean isClosed();
 }

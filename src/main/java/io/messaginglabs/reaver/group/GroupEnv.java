@@ -3,6 +3,7 @@ package io.messaginglabs.reaver.group;
 import io.messaginglabs.reaver.com.ServerConnector;
 import io.messaginglabs.reaver.com.Transporter;
 import io.messaginglabs.reaver.core.AlgorithmPhase;
+import io.messaginglabs.reaver.core.Sequencer;
 import io.messaginglabs.reaver.core.V0ValueCodec;
 import io.messaginglabs.reaver.core.ValueCodec;
 import io.messaginglabs.reaver.log.LogStorage;
@@ -31,6 +32,7 @@ public class GroupEnv {
     public ServerConnector connector;
     public AlgorithmPhase phase = AlgorithmPhase.TWO_PHASE;
     public ValueCodec codec = DEFAULT_CODEC;
+    public Sequencer sequencer;
 
     /*
      * run with debug mode or not.

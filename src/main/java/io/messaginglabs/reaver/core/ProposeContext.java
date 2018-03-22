@@ -1,6 +1,8 @@
 package io.messaginglabs.reaver.core;
 
 import io.messaginglabs.reaver.config.Config;
+import io.netty.buffer.ByteBuf;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -12,6 +14,7 @@ public class ProposeContext {
      */
     private long begin;
     private long end;
+    private PaxosStage stage;
 
     /*
      * times this proposal proposed due to conflicts or other
@@ -25,25 +28,62 @@ public class ProposeContext {
     // the instance propose this proposal based on the config
     private Config config;
     private AlgorithmPhase phase;
-    private List<GenericCommit> value;
+    private List<GenericCommit> commits = new ArrayList<>();
+    private ByteBuf value;
 
     private final Ballot proposed = new Ballot();
     private final Ballot maxPromised = new Ballot();
     private final VotersCounter prepareCounter = new VotersCounter();
     private final VotersCounter acceptCounter = new VotersCounter();
 
-    public void reset(long instanceId, List<GenericCommit> batch, Config config) {
+    public void reset(long instanceId, Config config, long nodeId) {
+        if (commits.isEmpty()) {
+            throw new IllegalArgumentException(
+                String.format("nothing needs to reach a consensus for instance(%d)", instanceId)
+            );
+        }
+
+        // Checks whether or not there's already one proposal is in progress
+        if (this.instanceId != -1) {
+            throw new IllegalStateException(
+                String.format("instance(%d) is in progress, can't propose a new one(%d)", this.instanceId, instanceId)
+            );
+        }
+
         this.instanceId = instanceId;
-        this.value = batch;
-        this.config = Objects.requireNonNull(config, "config");
+        this.config = config;
         this.begin = System.currentTimeMillis();
         this.end = 0;
         this.times = 0;
+
+        // a new proposal
+        this.proposed.setNodeId(nodeId);
+        this.proposed.setSequence(0);
     }
 
-    public int countDelay() {
+    public void clear() {
+
+    }
+
+    public void set(ByteBuf buffer) {
+        this.value = buffer;
+    }
+
+    public List<GenericCommit> valueCache() {
+        return commits;
+    }
+
+    public ByteBuf value() {
+        return value;
+    }
+
+    public int delay() {
         times++;
-        return times - 1;
+        return times;
+    }
+
+    public int timesDelayed() {
+        return times;
     }
 
     public AlgorithmPhase phase() {
@@ -55,7 +95,15 @@ public class ProposeContext {
     }
 
     public long instanceId() {
-        return 0;
+        return instanceId;
+    }
+
+    public PaxosInstance instance() {
+        return null;
+    }
+
+    public void instanceId(long instanceId) {
+        this.instanceId = instanceId;
     }
 
     public Ballot maxPromised() {
@@ -66,4 +114,64 @@ public class ProposeContext {
         return acceptCounter;
     }
 
+    public void begin(PaxosStage stage) {
+        this.begin = System.currentTimeMillis();
+        this.stage = stage;
+    }
+
+    public long begin() {
+        return begin;
+    }
+
+    public long delayed() {
+        if (begin == 0) {
+            /*
+             * nothing proposed
+             */
+            return -1;
+        }
+
+        return System.currentTimeMillis() - begin;
+    }
+
+    public PaxosStage stage() {
+        return stage;
+    }
+
+    public void setCommits(List<GenericCommit> commits) {
+        Objects.requireNonNull(commits, "commits");
+
+        if (commits.isEmpty()) {
+            throw new IllegalArgumentException("no commits");
+        }
+
+        if (stage != PaxosStage.READY) {
+            throw new IllegalStateException(
+                String.format("Paxos stage is not ready(%s)", stage.name())
+            );
+        }
+
+        if (commits == this.commits) {
+            /*
+             * a tiny optimization for reducing memory footprint
+             */
+            return ;
+        }
+
+        if (this.commits.size() > 0) {
+            throw new IllegalStateException(
+                String.format("commits cache is not empty(%d)", this.commits.size())
+            );
+        }
+
+        this.commits.addAll(commits);
+    }
+
+    public long nodeId() {
+        return 0;
+    }
+
+    public String dumpChosenInstance() {
+        return null;
+    }
 }

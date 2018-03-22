@@ -9,6 +9,8 @@ public class GroupOptions {
     public int pipeline;
 
     public int valueCacheCapacity;
+    public int retryInterval;
+    public int useConfigSpan;
 
     public boolean statistics;
 

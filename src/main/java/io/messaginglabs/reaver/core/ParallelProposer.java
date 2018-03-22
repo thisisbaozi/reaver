@@ -57,7 +57,7 @@ public class ParallelProposer extends AlgorithmVoter implements Proposer {
         };
 
         for (int i = 0; i < parallel; i++) {
-            this.proposers[i] = new DefaultSerialProposer(i, group().env());
+            // this.proposers[i] = new DefaultSerialProposer(i, group().env());
             this.proposers[i].observe(SerialProposer.State.FREE, consumer);
         }
     }
@@ -193,7 +193,7 @@ public class ParallelProposer extends AlgorithmVoter implements Proposer {
         }
 
         int bytes = 0;
-        List<GenericCommit> batch = proposer.newBatch();
+        List<GenericCommit> batch = proposer.valueCache();
         for (;;) {
             GenericCommit commit;
             if (reserved != null) {
@@ -247,7 +247,7 @@ public class ParallelProposer extends AlgorithmVoter implements Proposer {
 
     private boolean inBatch(GenericCommit commit) {
         /*
-         * There's only Value op can be proposed in batch.
+         * There's only ValueCtx op can be proposed in batch.
          */
         return commit.type() == CommitType.VALUE;
     }

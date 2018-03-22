@@ -1,22 +1,20 @@
 package io.messaginglabs.reaver.core;
 
 import io.messaginglabs.reaver.com.msg.PrepareReply;
-import io.messaginglabs.reaver.com.msg.Propose;
 import io.messaginglabs.reaver.com.msg.ProposeReply;
 import io.messaginglabs.reaver.config.Config;
 import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.dsl.CommitResult;
+import io.messaginglabs.reaver.dsl.Group;
+import io.messaginglabs.reaver.dsl.GroupStatistics;
 import io.messaginglabs.reaver.group.GroupEnv;
-import io.messaginglabs.reaver.group.MultiPaxosGroup;
+import io.messaginglabs.reaver.group.PaxosGroup;
 import io.netty.buffer.ByteBuf;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,169 +23,270 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
     private static final Logger logger = LoggerFactory.getLogger(DefaultSerialProposer.class);
 
     private final int id;
-    private final GroupEnv env;
 
-    @SuppressWarnings("all")
-    private final List<GenericCommit> cache;
+    private final PaxosGroup group;
     private final ProposeContext ctx;
-    private final Sequencer sequencer;
-    private final ByteBuf buffer;
-    private final Propose propose;
-    private PaxosInstance instance;
-
-    private State state;
-    private Function<ProposeContext, Boolean> beforePropose;
-    private ScheduledFuture<?> retry;
-    private int delay = 3000;
 
     /*
-     * for reducing memory footprint
+     * the task is response for checking whether or not a proposal is
+     * expired
      */
-    private final Runnable proposeRunner = this::propose;
-    private final Runnable retryRunner = this::proposeAgain;
+    private final ScheduledFuture<?> task;
 
-    public DefaultSerialProposer(int id, Sequencer sequencer, GroupEnv env) {
+    public DefaultSerialProposer(int id, PaxosGroup group) {
         this.id = id;
-        this.env = Objects.requireNonNull(env, "env");
-        this.sequencer = Objects.requireNonNull(sequencer, "sequencer");
+        this.group = Objects.requireNonNull(group, "group");
 
-        /*
-         * ArrayList is enough, thread-safe is not necessary
-         */
-        this.cache = new ArrayList<>();
+        GroupEnv env = group.env();
+        if (env == null) {
+            throw new IllegalArgumentException("no group env");
+        }
+
+        ByteBuf buf = env.allocator.buffer(1024 * 4);
+        if (buf == null) {
+            throw new IllegalStateException("bad alloc");
+        }
+
         this.ctx = new ProposeContext();
-        this.propose = new Propose();
-        this.buffer = env.allocator.buffer(1024 * 4);
+        this.ctx.set(buf);
 
-        this.state = State.FREE;
+        int interval = group.options().retryInterval;
+        task = env.executor.scheduleWithFixedDelay(this::propose, interval, interval, TimeUnit.MILLISECONDS);
     }
 
     @Override
-    public State state() {
-        return state;
+    public List<GenericCommit> valueCache() {
+        return ctx.valueCache();
     }
 
     @Override
-    public List<GenericCommit> newBatch() {
-        return cache;
+    public boolean isBusy() {
+        return ctx.instanceId() != -1;
     }
 
-    @Override
-    public void setProposeBeforeHook(Function<ProposeContext, Boolean> processor) {
-        this.beforePropose = processor;
-    }
-
-    @Override
-    public void setDelay(int time) {
-        this.delay = time;
-    }
-
-    @Override
-    public void commit(List<GenericCommit> batch) {
-        Objects.requireNonNull(batch, "batch");
-
-        if (batch.isEmpty()) {
-            throw new IllegalArgumentException("no values");
-        }
-
-        State state = state();
-        if (state != State.FREE) {
-            throw new IllegalStateException(
-                String.format("buggy, serial proposer(%d) is not free(%s)", id, state.name())
-            );
-        }
-
-        if (batch != cache) {
-            throw new IllegalStateException("buggy, batch is not the buffer of this proposer");
-        }
-
-        this.state = State.PROPOSING;
-
-        if (!newProposal(batch)) {
-            try {
-                fail(batch);
-            } finally {
-                this.state = State.FREE;
-            }
-
-            return ;
-        }
-
-        if (!proposeRightNow()) {
-            proposeLater();
-
-            /*
-             * statistics and add events if necessary
-             */
-
-            return ;
-        }
-
-        propose();
-    }
-
-    private void fail(List<GenericCommit> commits) {
-        Objects.requireNonNull(commits, "commits");
-
-        /*
-         * statistics and trace
-         */
+    private void fail(List<GenericCommit> commits, CommitResult result) {
+        Objects.requireNonNull(result, "result");
 
         for (GenericCommit commit : commits) {
-            if (commit.isCancelled() || commit.isDone()) {
+            if (commit.isDone() || commit.isCancelled()) {
+                // a bug?
                 throw new IllegalStateException(
-                    String.format("can't mark a commit(%s) that has been done", commit.toString())
+                    "commit should be pending, but it's done or cancelled"
                 );
             }
 
-            commit.setFailure(CommitResult.NO_CONFIG);
+            commit.setFailure(result);
         }
     }
 
-    private void propose() {
-        /*
-         * 0. serializes ctx to a buffer, and wrap the buffer with a message
-         * 1. broadcasts the message mentioned above
-         * 2. schedules a task for proposing the ctx again once the previous is timeout
-         *    or rejected.
-         */
-        propose(ctx);
-
-        /*
-         * try to propose again if the ctx is not accepted after
-         * a period.
-         */
-        retryAfter(delay);
-    }
-
-    private void retryAfter(long timeout) {
-        retry = env.executor.schedule(retryRunner, timeout, TimeUnit.MILLISECONDS);
-    }
-
-    private void proposeAgain() {
-        /*
-         * possible causes:
-         *
-         * 0. rejected by a number of acceptors
-         * 1. timeout due to network trouble
-         * 2. the value in the instance has been chosen, but it's not the value
-         *    this proposer proposed
-         */
-        if (env.debug) {
-            logger.info(
-                "propose instance({}) again, the previous round(acceptors({}), refused({}), max proposal({}))",
-                ctx.instanceId(),
-                ctx.acceptCounter().dumpAccepted(),
-                ctx.acceptCounter().dumpRefused(),
-                ctx.maxPromised().toString()
+    @Override
+    public void commit(List<GenericCommit> commits) {
+        if (isBusy()) {
+            throw new IllegalStateException(
+                String.format("buggy, proposer(%d) in group(%d) is processing another proposal", id, group.id())
             );
         }
 
+        if (isClosed()) {
+            fail(commits, CommitResult.CLOSED_GROUP);
+            return ;
+        }
+
+        ctx.setCommits(commits);
+
+        if (isDebug()) {
+            logger.trace("set a new commit({}) to proposer({}) of group({})", commits.size(), id, group.id());
+        }
+
+        /*
+         * Now, this proposer will keep to propose a value composed of
+         * the given commits until:
+         *
+         * 0. the value is chosen.
+         * 1. the group this proposer belongs to is closed(fail commits)
+         * 2. there's no a config
+         */
+        propose();
+    }
+
+    private void propose() {
+        if (group.state() != Group.State.RUNNING) {
+            fail(CommitResult.CLOSED_GROUP);
+            return ;
+        }
+
+        if (ctx.stage().isReady()) {
+            if (Defines.isValidInstance(ctx.instanceId())) {
+                /*
+                 * no nothing need to propose
+                 */
+                if (isDebug()) {
+                    logger.trace("nothing need to propose for proposer({}) of group({})", id, group.id());
+                }
+
+                return ;
+            }
+
+            if (!readyToRun()) {
+                return ;
+            }
+
+            propose(ctx);
+            return ;
+        }
+
+        if (ctx.instance().isDone()) {
+            onInstanceDone();
+            return ;
+        }
+
+        // try again if previous proposing is expired
+        long duration = System.currentTimeMillis() - ctx.begin();
+        if (duration >= group.options().retryInterval) {
+            /*
+             * possible causes:
+             *
+             * 0. rejected by a number of acceptors
+             * 1. network trouble
+             * 2. the value in the instance has been chosen, but it's not the value
+             *    this proposer proposed
+             */
+            if (isDebug()) {
+                logger.info(
+                    "propose instance({}) is expired, proposer({}/{}), ratio({}/{}), answered({})",
+                    ctx.instanceId(),
+                    id,
+                    group.id(),
+                    ctx.acceptCounter().accepted(),
+                    ctx.config().acceptors(),
+                    ctx.acceptCounter().dumpAccepted()
+                );
+            }
+
+            proposeAgain();
+        }
+    }
+
+    private boolean readyToRun() {
+        /*
+         * this proposer is able to go ahead unless:
+         *
+         * 0. find a free instance
+         * 1. it's not necessary to slow down
+         */
+        long instanceId = acquire();
+
+        if (isDebug()) {
+            logger.trace("a free instance({}) for proposer({}) of group({})", instanceId, id, group.id());
+        }
+
+        if (group.isSlowDown(instanceId)) {
+            int times = ctx.delay();
+
+            if (isDebug()) {
+                logger.debug("delay({} times) again for instance({}), delay duration({}ms)", times, ctx.instanceId(), ctx.delayed());
+            }
+
+            return false;
+        }
+
+        // find a config based on acquired instance id, if no config
+        // is available, fail commits
+        Config config = find(instanceId);
+        if (config == null) {
+            if (isDebug()) {
+                logger.info("no config is usable for instance({}), fail commits", instanceId);
+            }
+
+            fail(CommitResult.NO_CONFIG);
+
+            return false;
+        }
+
+        // init Paxos instance
+        PaxosInstance instance = group.cache().createIfAbsent(instanceId);
+        int holder = instance.hold(id);
+        if (holder != id) {
+            /*
+             * it's a bug, once happened, do:
+             *
+             * 0. fail commits
+             * 1. free group this proposer belongs to
+             */
+            fail(CommitResult.UNKNOWN_ERROR);
+
+            String msg = String.format(
+                "proposer(%d) of group(%d) can't hold the instance(%d), it's hold by another one(%d)",
+                id,
+                group.id(),
+                instanceId,
+                holder
+            );
+            group.freeze(msg);
+
+            return false;
+        }
+
+        group.env().sequencer.set(instanceId);
+        ctx.reset(instanceId, config, group.local().id());
+
+        return true;
+    }
+
+    private void fail(CommitResult result) {
+        if (ctx.valueCache().isEmpty()) {
+            return ;
+        }
+
+        try {
+            fail(ctx.valueCache(), result);
+        } finally {
+            /*
+             * in case...
+             */
+            ctx.clear();
+        }
+    }
+
+    private void onInstanceDone() {
+        Proposal chosen = ctx.instance().chosen();
+        if (chosen == null) {
+            throw new IllegalStateException(
+                String.format("buggy, instance(%s) is still pending", ctx.instance().touch())
+            );
+        }
+
+        /*
+         * ths Paxos instance is done, but the value in this instance may
+         * not be the one this proposer proposed
+         */
+        if (isDebug()) {
+            logger.info(ctx.dumpChosenInstance());
+        }
+
+        if (chosen.getNodeId() == ctx.nodeId()) {
+            // it's enough, group id + node id must be unique
+            ctx.clear();
+
+            if (isDebug()) {
+                logger.info("the value of proposer({}) of group({}) is chosen, it's ready to propose next one", id, group.id());
+            }
+
+            return ;
+        }
+
+        /*
+         * it's not the value we proposed, try again in a new instance
+         */
+        propose();
+    }
+
+    private void proposeAgain() {
         proposeIn3Phase(ctx);
     }
 
     private AlgorithmPhase getPhase() {
-        if (env.phase == AlgorithmPhase.THREE_PHASE) {
+        if (group.env().phase == AlgorithmPhase.THREE_PHASE) {
             return AlgorithmPhase.THREE_PHASE;
         }
 
@@ -230,18 +329,18 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
     }
 
     private void proposeIn2Phase(ProposeContext proposal) {
-        validate(proposal);
+        proposal.begin(PaxosStage.ACCEPT);
 
         Config config = proposal.config();
 
-        propose.setSequence(0);
-        propose.setNodeId(config.node().id());
-        propose.setGroupId(group().id());
-        propose.setInstanceId(proposal.instanceId());
-        propose.setValue(buffer);
-        propose.setOp(io.messaginglabs.reaver.com.msg.Message.Operation.PROPOSE);
+        // propose.setSequence(0);
+        // propose.setNodeId(config.node().id());
+        // propose.setGroupId(group().id());
+        // propose.setInstanceId(proposal.instanceId());
+        // propose.setValue(buffer);
+        // propose.setOp(io.messaginglabs.reaver.com.msg.Message.Operation.PROPOSE);
 
-        config.broadcast(propose);
+        // config.broadcast(propose);
 
         // add event
     }
@@ -254,6 +353,7 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
         /*
          * increase sequence if it's necessary
          */
+        /*
         int sequence = propose.getSequence();
         int maxSequence = proposal.maxPromised().getSequence();
         if (maxSequence > sequence) {
@@ -268,83 +368,59 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
         propose.setOp(io.messaginglabs.reaver.com.msg.Message.Operation.PREPARE);
 
         config.broadcast(propose);
+        */
     }
 
-    private void proposeLater() {
-        if (logger.isDebugEnabled()) {
-            logger.info("proposeLater {}ms to prepare ctx({}), proposer({})", delay, ctx.toString(), toString());
-        }
-
-        ScheduledExecutorService executor = env.executor;
-        try {
-            executor.schedule(proposeRunner, delay, TimeUnit.MILLISECONDS);
-        } catch (Exception cause) {
-            if (executor.isShutdown()) {
-                /*
-                 * it's likely that the group has been closed.
-                 */
-                logger.warn("");
-            } else {
-                /*
-                 * too many tasks?
-                 */
-                logger.warn("can't schedule proposing task({}) of proposer({}) due to too many tasks in executor", ctx.toString(), toString());
-
-                /*
-                 * mark for proposing later
-                 */
-                state = State.READY_TO_PREPARE;
-            }
-        }
-    }
-
-    private boolean proposeRightNow() {
-        if (beforePropose == null) {
-            return true;
-        }
-
-        /*
-         * slow down if:
-         *
-         * 0. too many chosen values in cache(Applier is too slow)
-         */
-        boolean result = false;
-        try {
-            result = beforePropose.apply(ctx);
-        } catch (Exception cause) {
-            /*
-             * a bug?
-             */
-            logger.error("caught unknown exception while invoking before prepare hook", cause);
-
-            if (isDebug()) {
-                System.exit(-1);
-            }
-        }
-
-        return result;
-    }
-
-    private boolean newProposal(List<GenericCommit> batch) {
+    private long acquire() {
         /*
          * find a sequence number for a new ctx, must ensure that
          * no ctx associated with the new sequence.
          */
-        long instanceId = sequencer.next();
-
-        /*
-         * find a config for this batch
-         */
-        Config config = find(instanceId);
-        if (config == null) {
-            /*
-             * no config, refuse this batch
-             */
-            return false;
+        InstanceCache cache = group.cache();
+        if (cache == null) {
+            throw new IllegalStateException(String.format("no cache in group(%d)", group.id()));
         }
 
-        ctx.reset(instanceId, batch, config);
-        return true;
+        int span = 0;
+        long instanceId = group.env().sequencer.get();
+
+        for (;;) {
+            span++;
+
+            PaxosInstance instance = cache.get(instanceId);
+            if (instance == null) {
+                /*
+                 * no one holds this
+                 */
+                break;
+            }
+
+            /*
+             * another proposer in config proposed a proposal in this
+             * instance id
+             */
+            instanceId++;
+        }
+
+        if (span > 1 && isDebug()) {
+            logger.info("span {} instances for allocating a free instance({}) in proposer({}) of group({})", span, instanceId, id, group.id());
+        }
+
+        return instanceId;
+    }
+
+    private long initProposal() {
+        long instanceId = acquire();
+
+        if (isDebug()) {
+            logger.info("acquired a instance id({}) for proposer({}) of group({})", instanceId, id, group.id());
+        }
+
+        /*
+         * resets context to new proposal
+         */
+        ctx.reset(instanceId, find(instanceId), group.local().id());
+        return instanceId;
     }
 
     @Override
@@ -353,35 +429,28 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
     }
 
     @Override
-    public MultiPaxosGroup group() {
-        return null;
-    }
-
-    @Override
     public void process(PrepareReply reply) {
         Objects.requireNonNull(reply, "reply");
 
-        if (instance == null) {
+        if (ctx.instance() == null) {
             /*
              * Either the proposal this proposer proposed is completed and it
              * is not yet to propose a new one, or it doesn't propose any one.
              */
-            if (env.debug) {
+            if (isDebug()) {
                 logger.info("ignore reply({}), can't find a instance associated with it", reply.toString());
             }
 
             return ;
         }
 
-        if (reply.getInstanceId() != instance.id()) {
-            if (env.debug) {
+        if (reply.getInstanceId() != ctx.instanceId()) {
+            if (isDebug()) {
                 logger.info("ignore prepare reply({}), current proposal({})", reply.toString(), ctx.toString());
             }
 
             return ;
         }
-
-        Proposal proposed = instance.proposed();
 
     }
 
@@ -392,18 +461,19 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
 
     @Override
     public void close() {
-        /*
-         * release resource
-         */
-        buffer.release();
+        ByteBuf value = ctx.value();
+        if (value != null) {
+            value.release();
+        }
 
-        /*
-         * if a timer scheduled, cancel it.
-         */
-        if (retry != null) {
-            if (!retry.isCancelled()) {
-                retry.cancel(false);
+        if (task != null) {
+            if (!task.isCancelled()) {
+                task.cancel(false);
             }
         }
+    }
+
+    @Override public boolean isClosed() {
+        return false;
     }
 }

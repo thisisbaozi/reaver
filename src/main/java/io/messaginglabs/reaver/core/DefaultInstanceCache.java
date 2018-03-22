@@ -9,7 +9,7 @@ import java.util.List;
 public class DefaultInstanceCache implements InstanceCache {
 
     private final LongObjectMap<PaxosInstance> map;
-    private final List<RecyableInstance> cache;
+    private final List<ReusableInstance> cache;
 
     /*
      * the maximum number of instance object the cache should maintain
@@ -26,14 +26,14 @@ public class DefaultInstanceCache implements InstanceCache {
     }
 
     @Override
-    public PaxosInstance newInstance(long id) {
+    public PaxosInstance createIfAbsent(long id) {
         PaxosInstance instance;
 
         if (cache.isEmpty()) {
             if (objectsUsed >= objectsCapacity) {
                 instance = new PaxosInstance();
             } else {
-                instance = new RecyableInstance();
+                instance = new ReusableInstance();
             }
         } else {
             instance = cache.remove(0);
@@ -67,7 +67,7 @@ public class DefaultInstanceCache implements InstanceCache {
         return map.size();
     }
 
-    private final class RecyableInstance extends PaxosInstance {
+    private final class ReusableInstance extends PaxosInstance {
 
         @Override
         protected void deallocate() {
@@ -75,7 +75,6 @@ public class DefaultInstanceCache implements InstanceCache {
             groupId = 0;
             id = 0;
             chosen = null;
-            accepted = null;
             proposed = null;
 
             cache.add(this);

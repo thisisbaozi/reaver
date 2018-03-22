@@ -11,4 +11,9 @@ public interface Config {
 
     int broadcast(Message msg);
 
+    /**
+     * Returns the number of acceptors in this config
+     */
+    int acceptors();
+
 }

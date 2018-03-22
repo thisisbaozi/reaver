@@ -7,7 +7,7 @@ public interface InstanceCache {
 
     PaxosInstance erase(long id);
 
-    PaxosInstance newInstance(long id);
+    PaxosInstance createIfAbsent(long id);
 
     int size();
 

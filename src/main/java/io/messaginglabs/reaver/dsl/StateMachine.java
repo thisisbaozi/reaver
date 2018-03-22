@@ -14,7 +14,7 @@ public interface StateMachine {
     /**
      * Failed to propose the commit
      */
-    void process(CommitResult cause, Value value);
+    void process(CommitResult cause, ValueCtx value);
 
     /**
      * processing critical errors, it's notified while a error taken

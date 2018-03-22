@@ -1,6 +1,6 @@
 package io.messaginglabs.reaver.config;
 
-import io.messaginglabs.reaver.core.ChosenValue;
+import io.messaginglabs.reaver.core.Chosen;
 
-public class AddNode extends ChosenValue {
+public class AddNode extends Chosen {
 }

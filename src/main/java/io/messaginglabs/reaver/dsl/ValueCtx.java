@@ -5,7 +5,7 @@ import io.netty.buffer.ByteBuf;
 /**
  * A failed commit means the Paxos can't commit the value due to some errors.
  */
-public interface Value {
+public interface ValueCtx {
 
     /**
      * Returns chosen value. As an optimization, the returned value may

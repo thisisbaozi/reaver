@@ -1,5 +1,6 @@
 package io.messaginglabs.reaver.core;
 
+import io.netty.buffer.ByteBuf;
 import io.netty.util.AbstractReferenceCounted;
 import io.netty.util.ReferenceCounted;
 
@@ -21,6 +22,12 @@ public class PaxosInstance extends AbstractReferenceCounted {
     // chosen proposal
     protected Proposal chosen;
     protected Proposal promised;
+
+    /*
+     * -1 means no one holds this instance, otherwise it's the id of
+     * a proposer
+     */
+    protected int holder;
 
     public void reset(long id) {
         this.id = id;
@@ -56,5 +63,22 @@ public class PaxosInstance extends AbstractReferenceCounted {
 
     public Proposal promised() {
         return promised;
+    }
+
+    public ByteBuf chosenValue() {
+        return null;
+    }
+
+    public Proposal chosen() {
+        return chosen;
+    }
+
+    public int hold(int proposerId) {
+        if (holder != -1) {
+            return holder;
+        }
+
+        holder = proposerId;
+        return -1;
     }
 }

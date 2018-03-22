@@ -1,6 +1,7 @@
 package io.messaginglabs.reaver.group;
 
 import io.messaginglabs.reaver.com.msg.Message;
+import io.messaginglabs.reaver.core.InstanceCache;
 import io.messaginglabs.reaver.dsl.ConfigControl;
 import io.messaginglabs.reaver.config.GroupConfigs;
 import io.messaginglabs.reaver.config.Node;
@@ -87,6 +88,36 @@ public class MultiPaxosGroup implements PaxosGroup {
 
     public final int id() {
         return id;
+    }
+
+    @Override public long maxInstanceId(long instanceId) {
+        return 0;
+    }
+
+    @Override public long maxInstanceId() {
+        return 0;
+    }
+
+    @Override public GroupOptions options() {
+        return null;
+    }
+
+    @Override
+    public boolean isSlowDown(long instanceId) {
+        /*
+         * There's only one factor we need to consider currently:
+         *
+         * 0. too many finished instances in cache(Applier is too slow)
+         */
+        return true;
+    }
+
+    @Override public int pendingCompletedInstances() {
+        return 0;
+    }
+
+    @Override public InstanceCache cache() {
+        return null;
     }
 
     @Override

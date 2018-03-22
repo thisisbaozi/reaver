@@ -1,6 +1,6 @@
 package io.messaginglabs.reaver.core;
 
-public abstract class ChosenValue {
+public abstract class Chosen {
 
     private int groupId;
 
@@ -32,7 +32,7 @@ public abstract class ChosenValue {
         if (o == null || getClass() != o.getClass())
             return false;
 
-        ChosenValue value = (ChosenValue)o;
+        Chosen value = (Chosen)o;
 
         return groupId == value.groupId && instanceId == value.instanceId;
     }
@@ -46,7 +46,7 @@ public abstract class ChosenValue {
 
     @Override
     public String toString() {
-        return "ChosenValue{" +
+        return "Chosen{" +
             "groupId=" + groupId +
             ", instanceId=" + instanceId +
             '}';

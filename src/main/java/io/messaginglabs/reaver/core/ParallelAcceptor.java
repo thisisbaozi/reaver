@@ -71,7 +71,7 @@ public class ParallelAcceptor extends AlgorithmVoter implements Acceptor {
             /*
              * it's a new instance
              */
-            instance = cache.newInstance(instanceId);
+            instance = cache.createIfAbsent(instanceId);
             assert (instance != null);
         }
 
