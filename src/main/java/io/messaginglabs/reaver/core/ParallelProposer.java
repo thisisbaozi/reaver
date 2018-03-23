@@ -182,7 +182,7 @@ public class ParallelProposer extends AlgorithmVoter implements Proposer {
     private void process(SerialProposer proposer) {
         Objects.requireNonNull(proposer, "proposer");
 
-        if (proposer.state() != SerialProposer.State.FREE) {
+        if (proposer.isBusy()) {
             throw new IllegalStateException(
                 String.format("buggy, proposer(%s) of group(%s) is not free", proposer.toString(), group().id())
             );
@@ -275,7 +275,7 @@ public class ParallelProposer extends AlgorithmVoter implements Proposer {
 
     private SerialProposer find() {
         for (SerialProposer proposer : proposers) {
-            if (proposer.state() == SerialProposer.State.FREE) {
+            if (!proposer.isBusy()) {
                 return proposer;
             }
         }

@@ -37,4 +37,8 @@ public class GroupConfig implements Config {
     public int broadcast(Message msg) {
         return 0;
     }
+
+    @Override public int acceptors() {
+        return 0;
+    }
 }

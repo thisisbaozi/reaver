@@ -8,4 +8,10 @@ public final class Defines {
         return instanceId == VOID_INSTANCE_ID;
     }
 
+    /*
+     * the maximum number of nodes allowed to vote as a acceptor for
+     * a group.
+     */
+    public static final int MAX_ACCEPTORS = 24;
+
 }

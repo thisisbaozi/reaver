@@ -8,6 +8,15 @@ public class Node {
     private int port;
     private volatile long id = 0;
 
+    public Node() {
+
+    }
+
+    public Node(String ip, int port) {
+        this.ip = ip;
+        this.port = port;
+    }
+
     public String getIp() {
         return ip;
     }

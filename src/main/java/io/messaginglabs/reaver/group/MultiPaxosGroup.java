@@ -112,6 +112,10 @@ public class MultiPaxosGroup implements PaxosGroup {
         return true;
     }
 
+    @Override public void freeze(String msg) {
+
+    }
+
     @Override public int pendingCompletedInstances() {
         return 0;
     }

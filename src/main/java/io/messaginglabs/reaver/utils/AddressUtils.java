@@ -28,8 +28,16 @@ public final class AddressUtils {
         return value;
     }
 
-    public static String toString(long address) {
+    public static String parseIp(long address) {
         return String.format("%d.%d.%d.%d", (address >> 24 + 32) & 0xFF, (address >> 16 + 32) & 0xFF, (address >> 8 + 32) & 0xFF, (address >> 32) & 0xFF);
+    }
+
+    public static int parsePort(long address) {
+        return (int)(address);
+    }
+
+    public static String toString(long address) {
+        return String.format("%s:%d", parseIp(address), parsePort(address));
     }
 
     public static InetAddress resolveIpV4() throws SocketException {

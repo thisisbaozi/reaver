@@ -3,10 +3,8 @@ package io.messaginglabs.reaver.core;
 import io.messaginglabs.reaver.com.msg.PrepareReply;
 import io.messaginglabs.reaver.com.msg.ProposeReply;
 import io.messaginglabs.reaver.config.Config;
-import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.dsl.CommitResult;
 import io.messaginglabs.reaver.dsl.Group;
-import io.messaginglabs.reaver.dsl.GroupStatistics;
 import io.messaginglabs.reaver.group.GroupEnv;
 import io.messaginglabs.reaver.group.PaxosGroup;
 import io.netty.buffer.ByteBuf;
@@ -111,14 +109,17 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
 
     private void propose() {
         if (group.state() != Group.State.RUNNING) {
+            /*
+             * fail commits if any
+             */
             fail(CommitResult.CLOSED_GROUP);
             return ;
         }
 
         if (ctx.stage().isReady()) {
-            if (Defines.isValidInstance(ctx.instanceId())) {
+            if (ctx.valueCache().isEmpty()) {
                 /*
-                 * no nothing need to propose
+                 * nothing needs to propose
                  */
                 if (isDebug()) {
                     logger.trace("nothing need to propose for proposer({}) of group({})", id, group.id());
@@ -129,6 +130,10 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
 
             if (!readyToRun()) {
                 return ;
+            }
+
+            if (Defines.isValidInstance(ctx.instanceId())) {
+                throw new IllegalStateException("buggy, instance is still void");
             }
 
             propose(ctx);
@@ -157,13 +162,19 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
                     ctx.instanceId(),
                     id,
                     group.id(),
-                    ctx.acceptCounter().accepted(),
+                    "",
                     ctx.config().acceptors(),
-                    ctx.acceptCounter().dumpAccepted()
+                    ctx.acceptCounter().dumpPromised()
                 );
             }
 
-            proposeAgain();
+            if (ctx.isRefused()) {
+                // refused by some one, propose the value based on 3 phases
+                proposeIn3Phase(ctx);
+            } else {
+                // timeout?
+                proposeIn2Phase(ctx);
+            }
         }
     }
 
@@ -281,9 +292,7 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
         propose();
     }
 
-    private void proposeAgain() {
-        proposeIn3Phase(ctx);
-    }
+
 
     private AlgorithmPhase getPhase() {
         if (group.env().phase == AlgorithmPhase.THREE_PHASE) {
@@ -294,8 +303,6 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
     }
 
     private void propose(ProposeContext ctx) {
-        Objects.requireNonNull(ctx, "ctx");
-
         if (getPhase() == AlgorithmPhase.TWO_PHASE) {
             proposeIn2Phase(ctx);
         } else {
@@ -306,32 +313,30 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
     private void validate(ProposeContext ctx) {
         Objects.requireNonNull(ctx, "ctx");
 
-        Config config = ctx.config();
-        if (config == null) {
+        if (ctx.config() == null) {
             throw new IllegalStateException(
                 String.format("no config in ctx(%s)", ctx.toString())
             );
         }
 
-        Node node = config.node();
-        if (node == null) {
+        if (ctx.config().node() == null) {
             throw new IllegalStateException(
-                String.format("buggy, node is null in config(%s)", config.toString())
+                String.format("buggy, node is null in config(%s)", ctx.config().toString())
             );
         }
 
-        long instanceId = ctx.instanceId();
-        if (instanceId == -1) {
+        if (Defines.isValidInstance(ctx.instanceId())) {
             throw new IllegalArgumentException(
                 String.format("instance id is -1, invalid ctx(%s)", ctx.toString())
             );
         }
     }
 
-    private void proposeIn2Phase(ProposeContext proposal) {
-        proposal.begin(PaxosStage.ACCEPT);
+    private void proposeIn2Phase(ProposeContext ctx) {
+        validate(ctx);
+        ctx.begin(PaxosStage.ACCEPT);
 
-        Config config = proposal.config();
+        // Config config = ctx.config();
 
         // propose.setSequence(0);
         // propose.setNodeId(config.node().id());
@@ -406,20 +411,6 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
             logger.info("span {} instances for allocating a free instance({}) in proposer({}) of group({})", span, instanceId, id, group.id());
         }
 
-        return instanceId;
-    }
-
-    private long initProposal() {
-        long instanceId = acquire();
-
-        if (isDebug()) {
-            logger.info("acquired a instance id({}) for proposer({}) of group({})", instanceId, id, group.id());
-        }
-
-        /*
-         * resets context to new proposal
-         */
-        ctx.reset(instanceId, find(instanceId), group.local().id());
         return instanceId;
     }
 

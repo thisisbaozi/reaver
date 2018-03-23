@@ -174,4 +174,8 @@ public class ProposeContext {
     public String dumpChosenInstance() {
         return null;
     }
+
+    public boolean isRefused() {
+        return false;
+    }
 }
