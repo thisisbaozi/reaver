@@ -6,11 +6,13 @@ public class PrepareReply extends Message {
 
     private int proposerId;
 
-    // ballot
+    // the ballot this
     private int sequence;
     private long nodeId;
+
     private ByteBuf value;
     private long instanceId;
+    private long acceptor;
     private Operation op;
 
     public Operation getOp() {
@@ -59,6 +61,14 @@ public class PrepareReply extends Message {
 
     public void setValue(ByteBuf value) {
         this.value = value;
+    }
+
+    public long getAcceptor() {
+        return acceptor;
+    }
+
+    public void setAcceptor(long acceptor) {
+        this.acceptor = acceptor;
     }
 
     @Override

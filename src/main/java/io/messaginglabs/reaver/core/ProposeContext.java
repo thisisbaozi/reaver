@@ -33,8 +33,7 @@ public class ProposeContext {
 
     private final Ballot proposed = new Ballot();
     private final Ballot maxPromised = new Ballot();
-    private final VotersCounter prepareCounter = new VotersCounter();
-    private final VotersCounter acceptCounter = new VotersCounter();
+    private final VotersCounter counter = new VotersCounter();
 
     public void reset(long instanceId, Config config, long nodeId) {
         if (commits.isEmpty()) {
@@ -110,8 +109,8 @@ public class ProposeContext {
         return maxPromised;
     }
 
-    public VotersCounter acceptCounter() {
-        return acceptCounter;
+    public VotersCounter counter() {
+        return counter;
     }
 
     public void begin(PaxosStage stage) {
@@ -178,4 +177,22 @@ public class ProposeContext {
     public boolean isRefused() {
         return false;
     }
+
+    public Proposal proposal() {
+        return null;
+    }
+
+    public PaxosStage setStage(PaxosStage stage) {
+        Objects.requireNonNull(stage, "stage");
+
+        PaxosStage current = this.stage;
+        this.stage = current;
+
+        return current;
+    }
+
+    public void setLargerSequence(long nodeId, int sequence) {
+
+    }
+
 }

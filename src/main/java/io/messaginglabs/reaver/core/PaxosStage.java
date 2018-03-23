@@ -13,4 +13,7 @@ public enum PaxosStage {
         return this == READY;
     }
 
+    public boolean isPrepare() {
+        return this == PREPARE;
+    }
 }

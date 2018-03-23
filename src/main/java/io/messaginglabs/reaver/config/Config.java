@@ -1,6 +1,7 @@
 package io.messaginglabs.reaver.config;
 
 import io.messaginglabs.reaver.com.msg.Message;
+import io.messaginglabs.reaver.core.Proposal;
 
 public interface Config {
 
@@ -15,5 +16,8 @@ public interface Config {
      * Returns the number of acceptors in this config
      */
     int acceptors();
+
+    void propose(long instanceId, Proposal proposal);
+    void prepare(long instanceId, Proposal proposal);
 
 }

@@ -1,5 +1,6 @@
 package io.messaginglabs.reaver.core;
 
+import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.com.msg.PrepareReply;
 import io.messaginglabs.reaver.com.msg.ProposeReply;
 import io.messaginglabs.reaver.config.Config;
@@ -7,6 +8,7 @@ import io.messaginglabs.reaver.dsl.CommitResult;
 import io.messaginglabs.reaver.dsl.Group;
 import io.messaginglabs.reaver.group.GroupEnv;
 import io.messaginglabs.reaver.group.PaxosGroup;
+import io.messaginglabs.reaver.utils.AddressUtils;
 import io.netty.buffer.ByteBuf;
 import java.util.List;
 import java.util.Objects;
@@ -49,7 +51,7 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
         this.ctx.set(buf);
 
         int interval = group.options().retryInterval;
-        task = env.executor.scheduleWithFixedDelay(this::propose, interval, interval, TimeUnit.MILLISECONDS);
+        task = env.executor.scheduleWithFixedDelay(this::process, interval, interval, TimeUnit.MILLISECONDS);
     }
 
     @Override
@@ -104,10 +106,10 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
          * 1. the group this proposer belongs to is closed(fail commits)
          * 2. there's no a config
          */
-        propose();
+        process();
     }
 
-    private void propose() {
+    private void process() {
         if (group.state() != Group.State.RUNNING) {
             /*
              * fail commits if any
@@ -136,7 +138,7 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
                 throw new IllegalStateException("buggy, instance is still void");
             }
 
-            propose(ctx);
+            start(ctx);
             return ;
         }
 
@@ -164,16 +166,16 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
                     group.id(),
                     "",
                     ctx.config().acceptors(),
-                    ctx.acceptCounter().dumpPromised()
+                    ctx.counter().dumpPromised()
                 );
             }
 
             if (ctx.isRefused()) {
                 // refused by some one, propose the value based on 3 phases
-                proposeIn3Phase(ctx);
+                // proposeIn3Phase(ctx);
             } else {
                 // timeout?
-                proposeIn2Phase(ctx);
+                // proposeIn2Phase(ctx);
             }
         }
     }
@@ -289,10 +291,8 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
         /*
          * it's not the value we proposed, try again in a new instance
          */
-        propose();
+        // propose();
     }
-
-
 
     private AlgorithmPhase getPhase() {
         if (group.env().phase == AlgorithmPhase.THREE_PHASE) {
@@ -302,11 +302,50 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
         return ctx.phase();
     }
 
-    private void propose(ProposeContext ctx) {
+    private void start(ProposeContext ctx) {
+        validate(ctx);
+
+        if (!ctx.stage().isReady()) {
+            throw new IllegalStateException(
+                String.format("buggy, ctx should be ready stage, but it's %s", ctx.stage().name())
+            );
+        }
+
+        Proposal proposal = ctx.proposal();
+        if (proposal == null) {
+            throw new IllegalStateException("buggy, can't create proposal");
+        }
+
+        Config config = ctx.config();
+        AlgorithmPhase phase = getPhase();
+        long instanceId = ctx.instanceId();
+
+        if (isDebug()) {
+            logger.trace(
+                "starts to propose the value in phase({}), instance({}), proposal({}), commits({}), stage({}), config({})",
+                phase.name(),
+                instanceId,
+                proposal.toString(),
+                ctx.valueCache().size(),
+                ctx.stage().name(),
+                config.toString()
+            );
+        }
+
+        PaxosStage stage;
         if (getPhase() == AlgorithmPhase.TWO_PHASE) {
-            proposeIn2Phase(ctx);
+            config.propose(instanceId, proposal);
+            stage = ctx.setStage(PaxosStage.ACCEPT);
         } else {
-            proposeIn3Phase(ctx);
+            config.prepare(instanceId, proposal);
+            stage = ctx.setStage(PaxosStage.PREPARE);
+        }
+
+        if (!stage.isReady()) {
+            // a bug
+            throw new IllegalStateException(
+                String.format("buggy, the stage of context should be ready, but it's %s", stage.name())
+            );
         }
     }
 
@@ -330,50 +369,6 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
                 String.format("instance id is -1, invalid ctx(%s)", ctx.toString())
             );
         }
-    }
-
-    private void proposeIn2Phase(ProposeContext ctx) {
-        validate(ctx);
-        ctx.begin(PaxosStage.ACCEPT);
-
-        // Config config = ctx.config();
-
-        // propose.setSequence(0);
-        // propose.setNodeId(config.node().id());
-        // propose.setGroupId(group().id());
-        // propose.setInstanceId(proposal.instanceId());
-        // propose.setValue(buffer);
-        // propose.setOp(io.messaginglabs.reaver.com.msg.Message.Operation.PROPOSE);
-
-        // config.broadcast(propose);
-
-        // add event
-    }
-
-    private void proposeIn3Phase(ProposeContext proposal) {
-        validate(proposal);
-
-        Config config = proposal.config();
-
-        /*
-         * increase sequence if it's necessary
-         */
-        /*
-        int sequence = propose.getSequence();
-        int maxSequence = proposal.maxPromised().getSequence();
-        if (maxSequence > sequence) {
-            sequence = maxSequence;
-        }
-
-        propose.setSequence(sequence);
-        propose.setNodeId(config.node().id());
-        propose.setGroupId(group().id());
-        propose.setInstanceId(proposal.instanceId());
-        propose.setValue(buffer);
-        propose.setOp(io.messaginglabs.reaver.com.msg.Message.Operation.PREPARE);
-
-        config.broadcast(propose);
-        */
     }
 
     private long acquire() {
@@ -443,6 +438,58 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
             return ;
         }
 
+        if (!ctx.stage().isPrepare()) {
+            if (isDebug()) {
+                logger.info(
+                    "ctx(instance={}, stage={}) is not in Paxos PREPARE stage, ignore prepare reply({})",
+                    ctx.instanceId(),
+                    ctx.stage().name(),
+                    reply.toString()
+                );
+            }
+        }
+
+
+        VotersCounter counter = ctx.counter();
+        if (reply.getOp() == Message.Operation.REJECT_PREPARE) {
+            if (isDebug()) {
+                logger.trace(
+                    "acceptor({}) rejected proposer({}/{})'s proposal(sequence={}, instance={}), due to an larger proposal({}/{})",
+                    AddressUtils.toString(reply.getAcceptor()),
+                    id,
+                    group.id(),
+                    ctx.proposal().sequence,
+                    ctx.instanceId(),
+                    reply.getSequence(),
+                    AddressUtils.toString(reply.getNodeId())
+                );
+            }
+
+            counter.countRejected(reply.getAcceptor());
+
+            // update view
+            ctx.setLargerSequence(reply.getNodeId(), reply.getSequence());
+        } else if (reply.getOp() == Message.Operation.PREPARE_REPLY) {
+            if (isDebug()) {
+                logger.trace(
+                    "acceptor({}) accept proposer({}/{})'s proposal(sequence={}, instance={})",
+                    AddressUtils.toString(reply.getAcceptor()),
+                    id,
+                    group.id(),
+                    ctx.proposal().sequence,
+                    ctx.instanceId()
+                );
+            }
+
+            counter.countRejected(reply.getAcceptor());
+
+            // Checks whether we should propose with another value or not
+                
+        } else {
+            throw new IllegalStateException(
+                "unknown op: " + reply.getOp().name()
+            );
+        }
     }
 
     @Override

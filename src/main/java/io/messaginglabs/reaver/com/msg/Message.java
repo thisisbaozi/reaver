@@ -8,15 +8,18 @@ public abstract class Message {
 
         PREPARE_REPLY(3),
         PREPARE_EMPTY_REPLY(4),
-        ACCEPT_REPLY(5),
+        REJECT_PREPARE(5),
+        ACCEPT_REPLY(6),
+        REJECT_ACCEPT(7),
+
 
         // config
-        ADD_NODE(6),
-        REMOVE_NODE(7),
-        FORCE_CONFIG(8),
+        ADD_NODE(8),
+        REMOVE_NODE(9),
+        FORCE_CONFIG(10),
 
         // boot
-        UNIFIED_BOOT(9)
+        UNIFIED_BOOT(11)
 
         ;
 

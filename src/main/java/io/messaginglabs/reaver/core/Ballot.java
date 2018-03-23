@@ -1,5 +1,7 @@
 package io.messaginglabs.reaver.core;
 
+import io.messaginglabs.reaver.utils.AddressUtils;
+
 public class Ballot {
 
     protected int sequence;
@@ -74,6 +76,7 @@ public class Ballot {
         return "Ballot{" +
             "sequence=" + sequence +
             ", nodeId=" + nodeId +
+            ", (" + AddressUtils.toString(nodeId) +
             '}';
     }
 }

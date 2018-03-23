@@ -19,7 +19,7 @@ public interface Participant {
     boolean isDebug();
 
     /**
-     * RunningEvents is used
+     * RunningEvents is used to trace the context of executing
      *
      * note that this only works in debug mode, the best practice is:
      *

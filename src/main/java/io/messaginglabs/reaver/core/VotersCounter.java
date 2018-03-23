@@ -1,6 +1,5 @@
 package io.messaginglabs.reaver.core;
 
-import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.utils.AddressUtils;
 
 public class VotersCounter {
@@ -104,7 +103,6 @@ public class VotersCounter {
             if (!parseState(ctx, i)) {
                 continue;
             }
-
 
             str.append(AddressUtils.toString(nodesAnswered[i]));
             if (count > 1) {
