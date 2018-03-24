@@ -1,10 +1,10 @@
 package io.messaginglabs.reaver.com;
 
 import io.messaginglabs.reaver.config.Node;
-import io.messaginglabs.reaver.utils.RefCount;
+import io.netty.util.ReferenceCounted;
 import java.util.function.Consumer;
 
-public interface Server extends RefCount {
+public interface Server extends ReferenceCounted {
 
     enum State {
         Inactive, Active,

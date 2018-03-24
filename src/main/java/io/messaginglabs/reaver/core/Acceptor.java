@@ -5,7 +5,7 @@ import io.messaginglabs.reaver.com.msg.PrepareReply;
 import io.messaginglabs.reaver.com.msg.Propose;
 import io.messaginglabs.reaver.com.msg.ProposeReply;
 
-public interface Acceptor extends Voter {
+public interface Acceptor extends Participant {
 
     PrepareReply process(Prepare prepare);
     ProposeReply process(Propose propose);

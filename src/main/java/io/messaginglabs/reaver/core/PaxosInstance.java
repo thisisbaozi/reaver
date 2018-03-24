@@ -16,8 +16,7 @@ public class PaxosInstance extends AbstractReferenceCounted {
      */
     protected long id;
 
-    // this node proposed proposal for this instance
-    protected Proposal proposed;
+    protected Proposal accepted;
 
     // chosen proposal
     protected Proposal chosen;
@@ -57,8 +56,8 @@ public class PaxosInstance extends AbstractReferenceCounted {
         return id;
     }
 
-    public Proposal proposed() {
-        return proposed;
+    public Proposal accepted() {
+        return accepted;
     }
 
     public Proposal promised() {

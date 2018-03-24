@@ -1,10 +1,11 @@
 package io.messaginglabs.reaver.com;
 
 import io.messaginglabs.reaver.config.Node;
-import io.messaginglabs.reaver.utils.RefCounted;
+import io.netty.util.AbstractReferenceCounted;
+import io.netty.util.ReferenceCounted;
 import java.util.function.Consumer;
 
-public class RemoteServer extends RefCounted implements Server {
+public class RemoteServer extends AbstractReferenceCounted implements Server {
 
     private final String ip;
     private final int port;
@@ -37,4 +38,8 @@ public class RemoteServer extends RefCounted implements Server {
 
     }
 
+    @Override
+    public ReferenceCounted touch(Object hint) {
+        return this;
+    }
 }

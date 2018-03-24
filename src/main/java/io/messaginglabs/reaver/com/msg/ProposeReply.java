@@ -3,6 +3,8 @@ package io.messaginglabs.reaver.com.msg;
 public class ProposeReply extends Message {
 
     private int proposerId;
+    private int sequence;
+    private long nodeId;
     private long instanceId;
     private long acceptorId;
     private Operation op;
@@ -37,6 +39,22 @@ public class ProposeReply extends Message {
 
     public void setOp(Operation op) {
         this.op = op;
+    }
+
+    public int getSequence() {
+        return sequence;
+    }
+
+    public void setSequence(int sequence) {
+        this.sequence = sequence;
+    }
+
+    public long getNodeId() {
+        return nodeId;
+    }
+
+    public void setNodeId(long nodeId) {
+        this.nodeId = nodeId;
     }
 
     @Override

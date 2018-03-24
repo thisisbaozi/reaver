@@ -68,4 +68,10 @@ public class TestUtils {
             // ignore
         }
     }
+
+    @Test
+    public void testBallotCompare() throws Exception {
+        
+    }
+
 }

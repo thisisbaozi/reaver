@@ -5,64 +5,106 @@ import io.messaginglabs.reaver.com.msg.Prepare;
 import io.messaginglabs.reaver.com.msg.PrepareReply;
 import io.messaginglabs.reaver.com.msg.Propose;
 import io.messaginglabs.reaver.com.msg.ProposeReply;
+import io.messaginglabs.reaver.group.PaxosGroup;
 import java.util.Objects;
 
-public class ParallelAcceptor extends AlgorithmVoter implements Acceptor {
+public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
 
-    private InstanceCache cache;
-    private PrepareReply prepareReply;
-    private ProposeReply acceptReply;
+    private final InstanceCache cache;
 
-    @Override
-    public PrepareReply process(Prepare prepare) {
-        Objects.requireNonNull(prepare, "prepare");
+    /*
+     * As a optimization for reducing memory footprint, this acceptor
+     * is able to reuse both objects, callers shouldn't rely on returned
+     * reply
+     */
+    private final PrepareReply prepare;
+    private final ProposeReply accept;
 
-        PaxosInstance instance = get(prepare.getInstanceId());
-        // events
+    public ParallelAcceptor(PaxosGroup group) {
+        super(group);
 
-        return process(instance, prepare);
+        this.cache = group.cache();
+        if (this.cache == null) {
+            throw new IllegalArgumentException("buggy, group has no instances cache");
+        }
+
+        this.prepare = new PrepareReply();
+        this.accept = new ProposeReply();
     }
 
-    private PrepareReply process(PaxosInstance instance, Prepare prepare) {
+    @Override
+    public PrepareReply process(Prepare msg) {
+        Objects.requireNonNull(msg, "prepare");
 
+        PaxosInstance instance = get(msg.getInstanceId());
 
-        /*
-         * the Paxos instance has might be finished.
-         */
+        // Tells the proposer proposed this prepare msg if the instance is
+        // finished
         if (instance.isDone()) {
             return null;
         }
 
-        int sequence = prepare.getSequence();
-        long nodeId = prepare.getNodeId();
+        Proposal proposal = instance.accepted();
+        Ballot.CompareResult result = proposal.compare(msg.getSequence(), msg.getNodeId());
 
-        /*
-         * execute the first currentPhase(Prepare currentPhase) of Paxos
-         */
-        Proposal proposal = instance.promised();
-        boolean isGreater = proposal.commpare(sequence, nodeId).isGreater();
-        if (isGreater) {
-            /*
-             * this acceptor has promised a proposal from another proposer.
-             */
+        prepare.setSequence(proposal.getSequence());
+        prepare.setNodeId(proposal.getNodeId());
+        prepare.setInstanceId(msg.getInstanceId());
+        prepare.setAcceptor(group().local().id());
+
+        if (result.isSmaller()) {
+            prepare.setOp(Message.Operation.REJECT_PREPARE);
+        } else {
+            // promise do not accept proposals which's id is smaller
+            // this one.
+            proposal.setSequence(msg.getSequence());
+            proposal.setNodeId(msg.getNodeId());
+
+            if (proposal.getValue() != null) {
+                // this acceptor has accepted a value, tell the proposer
+                // posted this msg that it should process the value first
+                prepare.setOp(Message.Operation.PREPARE_REPLY);
+                prepare.setValue(proposal.getValue());
+            } else {
+                prepare.setOp(Message.Operation.PREPARE_EMPTY_REPLY);
+            }
+        }
+
+        return prepare;
+    }
+
+
+    @Override
+    public ProposeReply process(Propose msg) {
+        Objects.requireNonNull(msg, "propose");
+
+        PaxosInstance instance = get(msg.getInstanceId());
+
+        if (instance.isDone()) {
             return null;
         }
 
-        proposal.setNodeId(nodeId);
-        proposal.setSequence(sequence);
+        Proposal proposal = instance.accepted();
+        Ballot.CompareResult result = proposal.compare(msg.getSequence(), msg.getNodeId());
 
-        prepareReply.setInstanceId(prepareReply.getInstanceId());
-        if (proposal.getValue() != null) {
-            /*
-             * copy accepted value and send it to the proposer proposed the given PREPARE
-             */
-            prepareReply.setOp(Message.Operation.PREPARE_REPLY);
-            prepareReply.setValue(proposal.getValue());
+        accept.setInstanceId(msg.getInstanceId());
+        accept.setSequence(proposal.getSequence());
+        accept.setAcceptorId(group().local().id());
+        accept.setNodeId(proposal.getNodeId());
+
+        if (result.isSmaller()) {
+            accept.setOp(Message.Operation.REJECT_ACCEPT);
         } else {
-            prepareReply.setOp(Message.Operation.PREPARE_EMPTY_REPLY);
+            // Do logging
+
+            proposal.setNodeId(msg.getNodeId());
+            proposal.setSequence(msg.getSequence());
+            proposal.setValue(msg.getValue());
+
+            accept.setOp(Message.Operation.ACCEPT_REPLY);
         }
 
-        return prepareReply;
+        return accept;
     }
 
     private PaxosInstance get(long instanceId) {
@@ -72,46 +114,16 @@ public class ParallelAcceptor extends AlgorithmVoter implements Acceptor {
              * it's a new instance
              */
             instance = cache.createIfAbsent(instanceId);
-            assert (instance != null);
+            if (instance == null) {
+                throw new IllegalStateException(
+                    String.format("can't create a instance(%d)", instanceId)
+                );
+            }
         }
 
         return instance;
     }
 
-    @Override
-    public ProposeReply process(Propose propose) {
-        Objects.requireNonNull(propose, "propose");
-
-        PaxosInstance instance = get(propose.getInstanceId());
-        return null;
-    }
-
-    private ProposeReply propose(PaxosInstance instance, Propose propose) {
-        if (isDone(instance)) {
-            return null;
-        }
-
-        int sequence = propose.getSequence();
-        long nodeId = propose.getNodeId();
-
-        Proposal proposal = instance.promised();
-        boolean isGreater = proposal.commpare(sequence, nodeId).isGreater();
-        if (isGreater) {
-            // ignore
-            return null;
-        }
-
-        acceptReply.setInstanceId(propose.getInstanceId());
-        return acceptReply;
-    }
-
-    private boolean isDone(PaxosInstance instance) {
-        if (instance.isDone()) {
-
-            return true;
-        }
-        return false;
-    }
 
 
 }

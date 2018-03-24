@@ -4,6 +4,7 @@ import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.com.msg.PrepareReply;
 import io.messaginglabs.reaver.com.msg.ProposeReply;
 import io.messaginglabs.reaver.config.Config;
+import io.messaginglabs.reaver.config.GroupConfigs;
 import io.messaginglabs.reaver.dsl.CommitResult;
 import io.messaginglabs.reaver.dsl.Group;
 import io.messaginglabs.reaver.group.GroupEnv;
@@ -18,7 +19,7 @@ import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class DefaultSerialProposer extends AlgorithmVoter implements SerialProposer {
+public class DefaultSerialProposer extends AlgorithmParticipant implements SerialProposer {
 
     private static final Logger logger = LoggerFactory.getLogger(DefaultSerialProposer.class);
 
@@ -178,6 +179,23 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
                 // proposeIn2Phase(ctx);
             }
         }
+    }
+
+    public Config find(long instanceId) {
+        inLoop();
+
+        if (instanceId < 0) {
+            throw new IllegalArgumentException("instance must be 0 or positive number, but given: " + instanceId);
+        }
+
+        GroupConfigs configs = group().configs();
+        if (configs == null) {
+            throw new IllegalStateException(
+                String.format("no configs in group(%s)", group().id())
+            );
+        }
+
+        return configs.find(instanceId);
     }
 
     private boolean readyToRun() {
@@ -458,7 +476,7 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
                  * this acceptor made this reply has accepted a value, propose
                  * other's value first if its proposal is greater
                  */
-                boolean isSmaller = ctx.proposal().commpare(reply.getSequence(), reply.getNodeId()).isGreater();
+                boolean isSmaller = ctx.proposal().compare(reply.getSequence(), reply.getNodeId()).isGreater();
                 if (isSmaller) {
                     ByteBuf value = reply.getValue();
                     if (value == null) {
@@ -621,7 +639,8 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
         }
     }
 
-    @Override public boolean isClosed() {
+    @Override
+    public boolean isClosed() {
         return false;
     }
 }

@@ -23,7 +23,7 @@ public class Ballot {
         this.nodeId = nodeId;
     }
 
-    public CompareResult commpare(int sequence, long nodeId) {
+    public CompareResult compare(int sequence, long nodeId) {
         if (sequence == this.sequence && nodeId == this.nodeId) {
             return CompareResult.EQUAL;
         }
