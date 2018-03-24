@@ -64,4 +64,20 @@ public abstract class Message {
         return Type.NORMAL;
     }
 
+    public boolean isPrepareReply() {
+        return op() == Operation.PREPARE_REPLY;
+    }
+
+    public boolean isEmptyReply() {
+        return op() == Operation.PREPARE_EMPTY_REPLY;
+    }
+
+    public boolean isAccepted() {
+        return op() == Operation.ACCEPT_REPLY;
+    }
+
+    public boolean isAcceptRejected() {
+        return op() == Operation.REJECT_ACCEPT;
+    }
+
 }

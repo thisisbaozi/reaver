@@ -118,7 +118,7 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
             return ;
         }
 
-        if (ctx.stage().isReady()) {
+        if (ctx.currentPhase().isReady()) {
             if (ctx.valueCache().isEmpty()) {
                 /*
                  * nothing needs to propose
@@ -305,9 +305,9 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
     private void start(ProposeContext ctx) {
         validate(ctx);
 
-        if (!ctx.stage().isReady()) {
+        if (!ctx.currentPhase().isReady()) {
             throw new IllegalStateException(
-                String.format("buggy, ctx should be ready stage, but it's %s", ctx.stage().name())
+                String.format("buggy, ctx should be ready currentPhase, but it's %s", ctx.currentPhase().name())
             );
         }
 
@@ -322,29 +322,29 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
 
         if (isDebug()) {
             logger.trace(
-                "starts to propose the value in phase({}), instance({}), proposal({}), commits({}), stage({}), config({})",
+                "starts to propose the value in phase({}), instance({}), proposal({}), commits({}), currentPhase({}), config({})",
                 phase.name(),
                 instanceId,
                 proposal.toString(),
                 ctx.valueCache().size(),
-                ctx.stage().name(),
+                ctx.currentPhase().name(),
                 config.toString()
             );
         }
 
-        PaxosStage stage;
+        PaxosPhase stage;
         if (getPhase() == AlgorithmPhase.TWO_PHASE) {
             config.propose(instanceId, proposal);
-            stage = ctx.setStage(PaxosStage.ACCEPT);
+            stage = ctx.setStage(PaxosPhase.ACCEPT);
         } else {
             config.prepare(instanceId, proposal);
-            stage = ctx.setStage(PaxosStage.PREPARE);
+            stage = ctx.setStage(PaxosPhase.PREPARE);
         }
 
         if (!stage.isReady()) {
             // a bug
             throw new IllegalStateException(
-                String.format("buggy, the stage of context should be ready, but it's %s", stage.name())
+                String.format("buggy, the currentPhase of context should be ready, but it's %s", stage.name())
             );
         }
     }
@@ -416,39 +416,9 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
 
     @Override
     public void process(PrepareReply reply) {
-        Objects.requireNonNull(reply, "reply");
-
-        if (ctx.instance() == null) {
-            /*
-             * Either the proposal this proposer proposed is completed and it
-             * is not yet to propose a new one, or it doesn't propose any one.
-             */
-            if (isDebug()) {
-                logger.info("ignore reply({}), can't find a instance associated with it", reply.toString());
-            }
-
+        if (isIgnorable(reply.getInstanceId(), PaxosPhase.PREPARE, reply)) {
             return ;
         }
-
-        if (reply.getInstanceId() != ctx.instanceId()) {
-            if (isDebug()) {
-                logger.info("ignore prepare reply({}), current proposal({})", reply.toString(), ctx.toString());
-            }
-
-            return ;
-        }
-
-        if (!ctx.stage().isPrepare()) {
-            if (isDebug()) {
-                logger.info(
-                    "ctx(instance={}, stage={}) is not in Paxos PREPARE stage, ignore prepare reply({})",
-                    ctx.instanceId(),
-                    ctx.stage().name(),
-                    reply.toString()
-                );
-            }
-        }
-
 
         VotersCounter counter = ctx.counter();
         if (reply.getOp() == Message.Operation.REJECT_PREPARE) {
@@ -469,7 +439,7 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
 
             // update view
             ctx.setLargerSequence(reply.getNodeId(), reply.getSequence());
-        } else if (reply.getOp() == Message.Operation.PREPARE_REPLY) {
+        } else if (reply.isPrepareReply() || reply.isEmptyReply()) {
             if (isDebug()) {
                 logger.trace(
                     "acceptor({}) accept proposer({}/{})'s proposal(sequence={}, instance={})",
@@ -481,20 +451,160 @@ public class DefaultSerialProposer extends AlgorithmVoter implements SerialPropo
                 );
             }
 
-            counter.countRejected(reply.getAcceptor());
+            counter.countPromised(reply.getAcceptor());
 
-            // Checks whether we should propose with another value or not
-                
+            if (reply.isPrepareReply()) {
+                /*
+                 * this acceptor made this reply has accepted a value, propose
+                 * other's value first if its proposal is greater
+                 */
+                boolean isSmaller = ctx.proposal().commpare(reply.getSequence(), reply.getNodeId()).isGreater();
+                if (isSmaller) {
+                    ByteBuf value = reply.getValue();
+                    if (value == null) {
+                        throw new IllegalStateException("buggy, no value");
+                    }
+
+                    ctx.setOtherValue(value);
+
+                    if (isDebug()) {
+                        logger.debug(
+                            "replace value({}) proposed by other({}) first because this proposer's({}/{}) proposal({}) is smaller than other({})",
+                            value.readableBytes(),
+                            AddressUtils.toString(reply.getNodeId()),
+                            id,
+                            group.id(),
+                            ctx.proposal().toString(),
+                            reply.getSequence()
+                        );
+                    }
+                }
+            }
         } else {
             throw new IllegalStateException(
                 "unknown op: " + reply.getOp().name()
             );
         }
+
+        checkPrepareResult(counter);
     }
+
+    private void checkPrepareResult(VotersCounter counter) {
+        /*
+         * three state:
+         *
+         * 0. accepted(accepted by a majority of members)
+         * 1. rejected
+         * 2. pending(do nothing)
+         */
+        Config config = ctx.config();
+        int majority = ctx.config().majority();
+        if (counter.nodesPromised() >= majority) {
+            if (isDebug()) {
+                logger.trace(
+                    "the prepare phase of proposal({}) of proposer({}/{}) is finished, go to the next phase",
+                    ctx.proposal().toString(),
+                    id,
+                    group.id()
+                );
+            }
+
+            ctx.setStage(PaxosPhase.ACCEPT);
+
+            // It's no necessary to process replies for first phase when we get here
+            // clear votes.
+            counter.reset();
+            config.propose(ctx.instanceId(), ctx.proposal());
+        } else if (counter.nodesRejected() >= majority) {
+            if (isDebug()) {
+                logger.trace(
+                    "the proposal({}) of proposer({}/{}) is rejected, go to the next phase",
+                    ctx.proposal().toString(),
+                    id,
+                    group.id()
+                );
+            }
+        }
+    }
+
+    private boolean isIgnorable(long instanceId, PaxosPhase phase, Message reply) {
+        Objects.requireNonNull(reply, "reply");
+
+        if (ctx.instance() == null) {
+            if (isDebug()) {
+                logger.info("ignore reply({}), can't find a instance associated with it", reply.toString());
+            }
+
+            return true;
+        }
+
+        if (instanceId != ctx.instanceId()) {
+            if (isDebug()) {
+                logger.info("ignore prepare reply({}), current proposal({})", reply.toString(), ctx.toString());
+            }
+
+            return true;
+        }
+
+        if (ctx.currentPhase() != phase) {
+            if (isDebug()) {
+                logger.info(
+                    "ctx(instance={}, currentPhase={}) is not in Paxos PREPARE currentPhase, ignore prepare reply({})",
+                    ctx.instanceId(),
+                    ctx.currentPhase().name(),
+                    reply.toString()
+                );
+            }
+        }
+
+        return false;
+    }
+
 
     @Override
     public void process(ProposeReply reply) {
-        Objects.requireNonNull(reply, "reply");
+        if (isIgnorable(reply.getInstanceId(), PaxosPhase.ACCEPT, reply)) {
+            return ;
+        }
+
+        VotersCounter counter = ctx.counter();
+        if (reply.isAcceptRejected()) {
+            if (isDebug()) {
+
+            }
+
+            counter.countRejected(reply.getAcceptorId());
+        } else if (reply.isAccepted()) {
+            if (isDebug()) {
+
+            }
+            counter.countPromised(reply.getAcceptorId());
+        } else {
+            throw new IllegalStateException(
+                "unknown msg reply type: " + reply.op().name()
+            );
+        }
+
+        checkAcceptPhase(counter);
+    }
+
+    private void checkAcceptPhase(VotersCounter counter) {
+        int majority = ctx.config().majority();
+        if (counter.nodesPromised() >= majority) {
+            if (isDebug()) {
+
+            }
+
+            /*
+             * now, the value in the instance this proposer is proposing
+             * is chosen, commit it.
+             */
+            onInstanceDone();
+        } else if (counter.nodesRejected() >= majority) {
+            if (isDebug()) {
+
+            }
+        }
     }
 
     @Override

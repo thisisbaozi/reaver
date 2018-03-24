@@ -37,7 +37,7 @@ public class ParallelAcceptor extends AlgorithmVoter implements Acceptor {
         long nodeId = prepare.getNodeId();
 
         /*
-         * execute the first stage(Prepare stage) of Paxos
+         * execute the first currentPhase(Prepare currentPhase) of Paxos
          */
         Proposal proposal = instance.promised();
         boolean isGreater = proposal.commpare(sequence, nodeId).isGreater();

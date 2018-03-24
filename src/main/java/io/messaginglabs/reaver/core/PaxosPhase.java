@@ -1,6 +1,6 @@
 package io.messaginglabs.reaver.core;
 
-public enum PaxosStage {
+public enum PaxosPhase {
 
     READY,
     PREPARE,

@@ -20,4 +20,5 @@ public interface Config {
     void propose(long instanceId, Proposal proposal);
     void prepare(long instanceId, Proposal proposal);
 
+    int majority();
 }

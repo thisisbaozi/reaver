@@ -2,6 +2,7 @@ package io.messaginglabs.reaver.config;
 
 import io.messaginglabs.reaver.com.Server;
 import io.messaginglabs.reaver.com.msg.Message;
+import io.messaginglabs.reaver.core.Proposal;
 import java.util.List;
 
 public class GroupConfig implements Config {
@@ -39,6 +40,18 @@ public class GroupConfig implements Config {
     }
 
     @Override public int acceptors() {
+        return 0;
+    }
+
+    @Override public void propose(long instanceId, Proposal proposal) {
+
+    }
+
+    @Override public void prepare(long instanceId, Proposal proposal) {
+
+    }
+
+    @Override public int majority() {
         return 0;
     }
 }

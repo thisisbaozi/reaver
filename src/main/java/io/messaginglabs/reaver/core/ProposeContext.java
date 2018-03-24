@@ -14,7 +14,7 @@ public class ProposeContext {
      */
     private long begin;
     private long end;
-    private PaxosStage stage;
+    private PaxosPhase stage;
 
     /*
      * times this proposal proposed due to conflicts or other
@@ -30,6 +30,7 @@ public class ProposeContext {
     private AlgorithmPhase phase;
     private List<GenericCommit> commits = new ArrayList<>();
     private ByteBuf value;
+    private ByteBuf tmpValue;
 
     private final Ballot proposed = new Ballot();
     private final Ballot maxPromised = new Ballot();
@@ -66,6 +67,10 @@ public class ProposeContext {
 
     public void set(ByteBuf buffer) {
         this.value = buffer;
+    }
+
+    public void setOtherValue(ByteBuf value) {
+        this.tmpValue = value;
     }
 
     public List<GenericCommit> valueCache() {
@@ -113,7 +118,7 @@ public class ProposeContext {
         return counter;
     }
 
-    public void begin(PaxosStage stage) {
+    public void begin(PaxosPhase stage) {
         this.begin = System.currentTimeMillis();
         this.stage = stage;
     }
@@ -133,7 +138,7 @@ public class ProposeContext {
         return System.currentTimeMillis() - begin;
     }
 
-    public PaxosStage stage() {
+    public PaxosPhase currentPhase() {
         return stage;
     }
 
@@ -144,9 +149,9 @@ public class ProposeContext {
             throw new IllegalArgumentException("no commits");
         }
 
-        if (stage != PaxosStage.READY) {
+        if (stage != PaxosPhase.READY) {
             throw new IllegalStateException(
-                String.format("Paxos stage is not ready(%s)", stage.name())
+                String.format("Paxos currentPhase is not ready(%s)", stage.name())
             );
         }
 
@@ -182,10 +187,10 @@ public class ProposeContext {
         return null;
     }
 
-    public PaxosStage setStage(PaxosStage stage) {
-        Objects.requireNonNull(stage, "stage");
+    public PaxosPhase setStage(PaxosPhase stage) {
+        Objects.requireNonNull(stage, "currentPhase");
 
-        PaxosStage current = this.stage;
+        PaxosPhase current = this.stage;
         this.stage = current;
 
         return current;
