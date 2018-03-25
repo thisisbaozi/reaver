@@ -1,13 +1,12 @@
 package io.messaginglabs.reaver.core;
 
 import io.messaginglabs.reaver.com.msg.Prepare;
-import io.messaginglabs.reaver.com.msg.PrepareReply;
+import io.messaginglabs.reaver.com.msg.AcceptorReply;
 import io.messaginglabs.reaver.com.msg.Propose;
-import io.messaginglabs.reaver.com.msg.ProposeReply;
 
 public interface Acceptor extends Participant {
 
-    PrepareReply process(Prepare prepare);
-    ProposeReply process(Propose propose);
+    AcceptorReply process(Prepare prepare);
+    AcceptorReply process(Propose propose);
 
 }

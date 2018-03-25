@@ -5,7 +5,7 @@ import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.core.Proposal;
 import java.util.List;
 
-public class GroupConfig implements Config {
+public class PaxosConfig implements Config {
 
     private int groupId;
 
@@ -52,6 +52,10 @@ public class GroupConfig implements Config {
     }
 
     @Override public int majority() {
+        return 0;
+    }
+
+    @Override public long beginInstanceId() {
         return 0;
     }
 }

@@ -37,7 +37,7 @@ public class DefaultServerConnector implements ServerConnector {
                  * finds one from active servers
                  */
                 for (Server active : servers) {
-                    if (active.refCount() < count) {
+                    if (active.refCnt() < count) {
                         server = active;
                         break;
                     }

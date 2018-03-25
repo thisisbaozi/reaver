@@ -1,8 +1,7 @@
 package io.messaginglabs.reaver.core;
 
 import io.messaginglabs.reaver.com.msg.Message;
-import io.messaginglabs.reaver.com.msg.PrepareReply;
-import io.messaginglabs.reaver.com.msg.ProposeReply;
+import io.messaginglabs.reaver.com.msg.AcceptorReply;
 import io.messaginglabs.reaver.config.Config;
 import io.messaginglabs.reaver.config.GroupConfigs;
 import io.messaginglabs.reaver.dsl.CommitResult;
@@ -24,8 +23,6 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     private static final Logger logger = LoggerFactory.getLogger(DefaultSerialProposer.class);
 
     private final int id;
-
-    private final PaxosGroup group;
     private final ProposeContext ctx;
 
     /*
@@ -35,8 +32,8 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     private final ScheduledFuture<?> task;
 
     public DefaultSerialProposer(int id, PaxosGroup group) {
-        this.id = id;
-        this.group = Objects.requireNonNull(group, "group");
+        super(group);
+
 
         GroupEnv env = group.env();
         if (env == null) {
@@ -48,11 +45,12 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             throw new IllegalStateException("bad alloc");
         }
 
+        this.id = id;
         this.ctx = new ProposeContext();
         this.ctx.set(buf);
 
         int interval = group.options().retryInterval;
-        task = env.executor.scheduleWithFixedDelay(this::process, interval, interval, TimeUnit.MILLISECONDS);
+        this.task = env.executor.scheduleWithFixedDelay(this::process, interval, interval, TimeUnit.MILLISECONDS);
     }
 
     @Override
@@ -66,8 +64,6 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     }
 
     private void fail(List<GenericCommit> commits, CommitResult result) {
-        Objects.requireNonNull(result, "result");
-
         for (GenericCommit commit : commits) {
             if (commit.isDone() || commit.isCancelled()) {
                 // a bug?
@@ -91,6 +87,10 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         if (isClosed()) {
             fail(commits, CommitResult.CLOSED_GROUP);
             return ;
+        }
+
+        if (!ctx.currentPhase().isReady()) {
+            throw new IllegalStateException("buggy, current phase is not ready, it's " + ctx.currentPhase().name());
         }
 
         ctx.setCommits(commits);
@@ -121,9 +121,6 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
         if (ctx.currentPhase().isReady()) {
             if (ctx.valueCache().isEmpty()) {
-                /*
-                 * nothing needs to propose
-                 */
                 if (isDebug()) {
                     logger.trace("nothing need to propose for proposer({}) of group({})", id, group.id());
                 }
@@ -144,6 +141,9 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         }
 
         if (ctx.instance().isDone()) {
+            /*
+             * likely, another proposer owns the instance
+             */
             onInstanceDone();
             return ;
         }
@@ -230,7 +230,6 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             }
 
             fail(CommitResult.NO_CONFIG);
-
             return false;
         }
 
@@ -350,20 +349,12 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             );
         }
 
-        PaxosPhase stage;
         if (getPhase() == AlgorithmPhase.TWO_PHASE) {
             config.propose(instanceId, proposal);
-            stage = ctx.setStage(PaxosPhase.ACCEPT);
+            ctx.setStage(PaxosPhase.ACCEPT);
         } else {
             config.prepare(instanceId, proposal);
-            stage = ctx.setStage(PaxosPhase.PREPARE);
-        }
-
-        if (!stage.isReady()) {
-            // a bug
-            throw new IllegalStateException(
-                String.format("buggy, the currentPhase of context should be ready, but it's %s", stage.name())
-            );
+            ctx.setStage(PaxosPhase.PREPARE);
         }
     }
 
@@ -433,17 +424,25 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     }
 
     @Override
-    public void process(PrepareReply reply) {
+    public void process(AcceptorReply reply) {
+        if (reply.isPrepareReply() || reply.isEmptyPrepareReply()) {
+            processPrepareReply(reply);
+        } else if (reply.isAccepted() || reply.isAcceptRejected()) {
+            processAcceptReply(reply);
+        }
+    }
+
+    private void processPrepareReply(AcceptorReply reply) {
         if (isIgnorable(reply.getInstanceId(), PaxosPhase.PREPARE, reply)) {
             return ;
         }
 
         VotersCounter counter = ctx.counter();
-        if (reply.getOp() == Message.Operation.REJECT_PREPARE) {
+        if (reply.getOp() == Opcode.REJECT_PREPARE) {
             if (isDebug()) {
                 logger.trace(
                     "acceptor({}) rejected proposer({}/{})'s proposal(sequence={}, instance={}), due to an larger proposal({}/{})",
-                    AddressUtils.toString(reply.getAcceptor()),
+                    AddressUtils.toString(reply.getAcceptorId()),
                     id,
                     group.id(),
                     ctx.proposal().sequence,
@@ -453,15 +452,15 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
                 );
             }
 
-            counter.countRejected(reply.getAcceptor());
+            counter.countRejected(reply.getAcceptorId());
 
             // update view
             ctx.setLargerSequence(reply.getNodeId(), reply.getSequence());
-        } else if (reply.isPrepareReply() || reply.isEmptyReply()) {
+        } else if (reply.isPrepareReply() || reply.isEmptyPrepareReply()) {
             if (isDebug()) {
                 logger.trace(
                     "acceptor({}) accept proposer({}/{})'s proposal(sequence={}, instance={})",
-                    AddressUtils.toString(reply.getAcceptor()),
+                    AddressUtils.toString(reply.getAcceptorId()),
                     id,
                     group.id(),
                     ctx.proposal().sequence,
@@ -469,7 +468,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
                 );
             }
 
-            counter.countPromised(reply.getAcceptor());
+            counter.countPromised(reply.getAcceptorId());
 
             if (reply.isPrepareReply()) {
                 /*
@@ -578,9 +577,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         return false;
     }
 
-
-    @Override
-    public void process(ProposeReply reply) {
+    private void processAcceptReply(AcceptorReply reply) {
         if (isIgnorable(reply.getInstanceId(), PaxosPhase.ACCEPT, reply)) {
             return ;
         }

@@ -1,10 +1,8 @@
 package io.messaginglabs.reaver.core;
 
-import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.com.msg.Prepare;
-import io.messaginglabs.reaver.com.msg.PrepareReply;
+import io.messaginglabs.reaver.com.msg.AcceptorReply;
 import io.messaginglabs.reaver.com.msg.Propose;
-import io.messaginglabs.reaver.com.msg.ProposeReply;
 import io.messaginglabs.reaver.group.PaxosGroup;
 import java.util.Objects;
 
@@ -17,8 +15,7 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
      * is able to reuse both objects, callers shouldn't rely on returned
      * reply
      */
-    private final PrepareReply prepare;
-    private final ProposeReply accept;
+    private final AcceptorReply reply;
 
     public ParallelAcceptor(PaxosGroup group) {
         super(group);
@@ -28,17 +25,16 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
             throw new IllegalArgumentException("buggy, group has no instances cache");
         }
 
-        this.prepare = new PrepareReply();
-        this.accept = new ProposeReply();
+        this.reply = new AcceptorReply();
     }
 
     @Override
-    public PrepareReply process(Prepare msg) {
-        Objects.requireNonNull(msg, "prepare");
+    public AcceptorReply process(Prepare msg) {
+        Objects.requireNonNull(msg, "reply");
 
         PaxosInstance instance = get(msg.getInstanceId());
 
-        // Tells the proposer proposed this prepare msg if the instance is
+        // Tells the proposer proposed this reply msg if the instance is
         // finished
         if (instance.isDone()) {
             return null;
@@ -47,13 +43,13 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
         Proposal proposal = instance.accepted();
         Ballot.CompareResult result = proposal.compare(msg.getSequence(), msg.getNodeId());
 
-        prepare.setSequence(proposal.getSequence());
-        prepare.setNodeId(proposal.getNodeId());
-        prepare.setInstanceId(msg.getInstanceId());
-        prepare.setAcceptor(group().local().id());
+        reply.setSequence(proposal.getSequence());
+        reply.setNodeId(proposal.getNodeId());
+        reply.setInstanceId(msg.getInstanceId());
+        reply.setAcceptorId(group().local().id());
 
         if (result.isSmaller()) {
-            prepare.setOp(Message.Operation.REJECT_PREPARE);
+            reply.setOp(Opcode.REJECT_PREPARE);
         } else {
             // promise do not accept proposals which's id is smaller
             // this one.
@@ -63,19 +59,19 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
             if (proposal.getValue() != null) {
                 // this acceptor has accepted a value, tell the proposer
                 // posted this msg that it should process the value first
-                prepare.setOp(Message.Operation.PREPARE_REPLY);
-                prepare.setValue(proposal.getValue());
+                reply.setOp(Opcode.PREPARE_REPLY);
+                reply.setValue(proposal.getValue());
             } else {
-                prepare.setOp(Message.Operation.PREPARE_EMPTY_REPLY);
+                reply.setOp(Opcode.PREPARE_EMPTY_REPLY);
             }
         }
 
-        return prepare;
+        return reply;
     }
 
 
     @Override
-    public ProposeReply process(Propose msg) {
+    public AcceptorReply process(Propose msg) {
         Objects.requireNonNull(msg, "propose");
 
         PaxosInstance instance = get(msg.getInstanceId());
@@ -87,13 +83,13 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
         Proposal proposal = instance.accepted();
         Ballot.CompareResult result = proposal.compare(msg.getSequence(), msg.getNodeId());
 
-        accept.setInstanceId(msg.getInstanceId());
-        accept.setSequence(proposal.getSequence());
-        accept.setAcceptorId(group().local().id());
-        accept.setNodeId(proposal.getNodeId());
+        reply.setInstanceId(msg.getInstanceId());
+        reply.setSequence(proposal.getSequence());
+        reply.setAcceptorId(group().local().id());
+        reply.setNodeId(proposal.getNodeId());
 
         if (result.isSmaller()) {
-            accept.setOp(Message.Operation.REJECT_ACCEPT);
+            reply.setOp(Opcode.REJECT_ACCEPT);
         } else {
             // Do logging
 
@@ -101,10 +97,10 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
             proposal.setSequence(msg.getSequence());
             proposal.setValue(msg.getValue());
 
-            accept.setOp(Message.Operation.ACCEPT_REPLY);
+            reply.setOp(Opcode.ACCEPT_REPLY);
         }
 
-        return accept;
+        return reply;
     }
 
     private PaxosInstance get(long instanceId) {

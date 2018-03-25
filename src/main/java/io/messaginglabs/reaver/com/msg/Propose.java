@@ -1,5 +1,6 @@
 package io.messaginglabs.reaver.com.msg;
 
+import io.messaginglabs.reaver.core.Opcode;
 import io.netty.buffer.ByteBuf;
 
 public class Propose extends Message {
@@ -21,7 +22,7 @@ public class Propose extends Message {
      * combined value
      */
     private ByteBuf value;
-    private Operation op;
+    private Opcode op;
 
     public int getProposerId() {
         return proposerId;
@@ -63,16 +64,16 @@ public class Propose extends Message {
         this.value = value;
     }
 
-    public Operation getOp() {
+    public Opcode getOp() {
         return op;
     }
 
-    public void setOp(Operation op) {
+    public void setOp(Opcode op) {
         this.op = op;
     }
 
     @Override
-    public Operation op() {
+    public Opcode op() {
         return op;
     }
 

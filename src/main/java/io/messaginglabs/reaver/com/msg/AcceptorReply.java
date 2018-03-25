@@ -1,25 +1,27 @@
 package io.messaginglabs.reaver.com.msg;
 
+import io.messaginglabs.reaver.core.Opcode;
 import io.netty.buffer.ByteBuf;
 
-public class PrepareReply extends Message {
+public class AcceptorReply extends Message {
 
     private int proposerId;
 
-    // the ballot this
+    // proposal
     private int sequence;
     private long nodeId;
-
     private ByteBuf value;
-    private long instanceId;
-    private long acceptor;
-    private Operation op;
 
-    public Operation getOp() {
+    private long instanceId;
+    private long acceptorId;
+
+    private Opcode op;
+
+    public Opcode getOp() {
         return op;
     }
 
-    public void setOp(Operation op) {
+    public void setOp(Opcode op) {
         this.op = op;
     }
 
@@ -63,16 +65,16 @@ public class PrepareReply extends Message {
         this.value = value;
     }
 
-    public long getAcceptor() {
-        return acceptor;
+    public long getAcceptorId() {
+        return acceptorId;
     }
 
-    public void setAcceptor(long acceptor) {
-        this.acceptor = acceptor;
+    public void setAcceptorId(long acceptorId) {
+        this.acceptorId = acceptorId;
     }
 
     @Override
-    public Operation op() {
+    public Opcode op() {
         return op;
     }
 }

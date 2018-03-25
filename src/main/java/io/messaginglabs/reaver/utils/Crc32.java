@@ -3,7 +3,7 @@ package io.messaginglabs.reaver.utils;
 public final class Crc32 {
 
     private Crc32() {
-        // Construction is not necessary
+
     }
 
     private static final int[] table = {

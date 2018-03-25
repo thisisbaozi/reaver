@@ -1,10 +1,8 @@
 package io.messaginglabs.reaver.core;
 
-import io.messaginglabs.reaver.com.msg.PrepareReply;
-import io.messaginglabs.reaver.com.msg.ProposeReply;
+import io.messaginglabs.reaver.com.msg.AcceptorReply;
 import java.util.List;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 public interface SerialProposer {
 
@@ -22,8 +20,7 @@ public interface SerialProposer {
     List<GenericCommit> valueCache();
 
     void commit(List<GenericCommit> batch);
-    void process(PrepareReply reply);
-    void process(ProposeReply reply);
+    void process(AcceptorReply reply);
     void observe(State state, Consumer<SerialProposer> consumer);
 
     void close();

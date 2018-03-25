@@ -11,7 +11,7 @@ public interface Config {
     Node node();
 
     int broadcast(Message msg);
-
+    long beginInstanceId();
     /**
      * Returns the number of acceptors in this config
      */

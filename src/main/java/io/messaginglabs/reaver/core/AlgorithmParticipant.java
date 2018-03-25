@@ -10,7 +10,8 @@ public abstract class AlgorithmParticipant implements Participant {
     /*
      * the group this algorithm participant belongs to
      */
-    private final PaxosGroup group;
+    protected final PaxosGroup group;
+
     /*
      * the thread is response for processing
      */

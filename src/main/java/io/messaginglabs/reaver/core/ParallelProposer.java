@@ -29,6 +29,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
     private GenericCommit reserved = null;
 
     public ParallelProposer(int cacheCapacity, int maxBatchSize, int parallel) {
+        super(null);
         if (cacheCapacity <= 0) {
             throw new IllegalArgumentException("value cache capacity must greater than 0, but given " + cacheCapacity);
         }

@@ -71,7 +71,6 @@ public class TestUtils {
 
     @Test
     public void testBallotCompare() throws Exception {
-        
     }
 
 }

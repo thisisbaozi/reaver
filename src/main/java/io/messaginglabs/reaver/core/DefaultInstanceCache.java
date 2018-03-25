@@ -75,7 +75,6 @@ public class DefaultInstanceCache implements InstanceCache {
             groupId = 0;
             id = 0;
             chosen = null;
-            proposed = null;
 
             cache.add(this);
         }

@@ -1,5 +1,6 @@
 package io.messaginglabs.reaver.com.msg;
 
+import io.messaginglabs.reaver.core.Opcode;
 import io.netty.buffer.ByteBuf;
 
 public class Prepare extends Message {
@@ -43,7 +44,7 @@ public class Prepare extends Message {
     }
 
     @Override
-    public Operation op() {
-        return Operation.PREPARE;
+    public Opcode op() {
+        return Opcode.PREPARE;
     }
 }
