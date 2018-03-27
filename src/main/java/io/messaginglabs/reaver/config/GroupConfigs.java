@@ -1,5 +1,6 @@
 package io.messaginglabs.reaver.config;
 
+import io.messaginglabs.reaver.com.Server;
 import java.util.List;
 
 public interface GroupConfigs {
@@ -10,4 +11,7 @@ public interface GroupConfigs {
 
     Config match(long instanceId);
 
+    List<Server> serversConnected();
+
+    Config newest();
 }

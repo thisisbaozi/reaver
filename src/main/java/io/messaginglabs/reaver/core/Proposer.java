@@ -9,4 +9,5 @@ public interface Proposer extends Participant {
     Commit commit(ByteBuffer value);
     CommitResult commit(ByteBuffer value, Object attachment);
 
+    boolean close(long timeout);
 }

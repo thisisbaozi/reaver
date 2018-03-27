@@ -2,33 +2,45 @@ package io.messaginglabs.reaver.group;
 
 import io.messaginglabs.reaver.com.Server;
 import io.messaginglabs.reaver.com.msg.Message;
+import io.messaginglabs.reaver.core.Acceptor;
+import io.messaginglabs.reaver.core.Applier;
 import io.messaginglabs.reaver.core.InstanceCache;
+import io.messaginglabs.reaver.core.Learner;
 import io.messaginglabs.reaver.dsl.ConfigControl;
 import io.messaginglabs.reaver.config.GroupConfigs;
 import io.messaginglabs.reaver.config.Node;
-import io.messaginglabs.reaver.core.ParallelProposer;
 import io.messaginglabs.reaver.core.Proposer;
-import io.messaginglabs.reaver.dsl.ClosedGroupException;
 import io.messaginglabs.reaver.dsl.Commit;
 import io.messaginglabs.reaver.dsl.CommitResult;
 import io.messaginglabs.reaver.dsl.PaxosGroup;
 import io.messaginglabs.reaver.dsl.GroupStatistics;
 import io.messaginglabs.reaver.dsl.StateMachine;
+import io.netty.util.ReferenceCounted;
 import java.nio.ByteBuffer;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class MultiPaxosGroup implements InternalPaxosGroup {
+
+    private static final Logger logger = LoggerFactory.getLogger(MultiPaxosGroup.class);
 
     // global unique identifier
     private final int id;
     private final GroupEnv env;
     private final GroupOptions options;
 
-
     private PaxosGroup.State state;
+    private String msg;
+
     private GroupConfigs configs;
     private Proposer proposer;
+    private Acceptor acceptor;
+    private Learner learner;
+    private Applier applier;
     private StateMachine sm;
+
+    private Runnable closeListener;
 
     public MultiPaxosGroup(int id, GroupEnv env, GroupOptions options) {
         this.env = Objects.requireNonNull(env, "env");
@@ -72,25 +84,30 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
         return true;
     }
 
-    @Override public void freeze(String msg) {
-
+    @Override
+    public void freeze(String msg) {
+        this.state = State.FROZEN;
+        this.msg = msg;
     }
 
-    @Override public int pendingCompletedInstances() {
+    @Override
+    public int pendingCompletedInstances() {
         return 0;
     }
 
-    @Override public InstanceCache cache() {
-        return null;
-    }
-
-    @Override public Server server() {
+    @Override
+    public InstanceCache cache() {
         return null;
     }
 
     @Override
-    public void register(StateMachine machine) {
+    public Server server() {
+        return null;
+    }
 
+    @Override
+    public void register(StateMachine sm) {
+        this.sm = Objects.requireNonNull(sm, "sm");
     }
 
     @Override
@@ -116,24 +133,11 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
         return null;
     }
 
-    private void initParticipants() {
-        // proposer
-        proposer = new ParallelProposer(options.valueCacheCapacity, options.batch, options.pipeline);
-
-        // acceptor
-
-        // learner
-    }
-
-
-
     private void checkState(ByteBuffer value) {
-        if (state == PaxosGroup.State.NOT_STARTED) {
-            throw new IllegalArgumentException(String.format("init group(%s) before committing values to it", id));
-        }
-
-        if (state == PaxosGroup.State.SHUTTING_DOWN || state == PaxosGroup.State.SHUTDOWN) {
-            throw new ClosedGroupException(id + " is shutdown");
+        if (state != State.RUNNING) {
+            throw new IllegalStateException(
+                String.format("group(%d) is not running(%s)", id, state.name())
+            );
         }
 
         Objects.requireNonNull(value, "value");
@@ -172,38 +176,151 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
         return null;
     }
 
-    @Override public State state() {
-        return null;
-    }
-
-    @Override
-    public void close() {
-
-    }
-
-    @Override
-    public void destroy() {
-
-    }
-
-    @Override
-    public boolean isClosed() {
-        return false;
-    }
-
     public GroupEnv env() {
         return env;
     }
 
-    @Override public GroupConfigs configs() {
+    @Override
+    public GroupConfigs configs() {
         return null;
     }
 
     @Override
     public void process(Message msg) {
-        // check whether this group should process the given message or not
+        Objects.requireNonNull(msg, "msg");
 
-        // dispatch
+        int dstId = msg.getGroupId();
+        if (dstId != id) {
+            throw new IllegalStateException(
+                String.format("buggy, group(%d) can't process messages belong to group(%d)", id, dstId)
+            );
+        }
+
+        if (state != State.RUNNING) {
+            if (logger.isDebugEnabled()) {
+                logger.debug("group({}) ignores message({}), it's not running({})", id, msg.toString(), state.name());
+            }
+
+            return ;
+        }
+
+        dispatch(msg);
+    }
+
+    private void dispatch(Message msg) {
+
+    }
+
+    @Override
+    public State state() {
+        return state;
+    }
+
+    @Override
+    public void close(long timeout) throws Exception {
+        synchronized (this) {
+            if (isClosed()) {
+                return ;
+            }
+
+            state = State.SHUTTING_DOWN;
+            doClose(timeout);
+            state = State.SHUTDOWN;
+        }
+    }
+
+    private void doClose(long timeout) throws Exception {
+        /*
+         * 5 things:
+         *
+         * 0. stop participants
+         * 1. shutdown tasks
+         * 2. notify state machine
+         * 3. releases resources
+         * 4. invoke listener if any
+         */
+        stopParticipants(timeout);
+        shutdownTasks();
+
+        try {
+            sm.onGroupClosed();
+        } catch (Exception cause) {
+            logger.warn("caught unknown exception while notifying state machine", cause);
+        }
+
+        env.connector.release();
+        configs.serversConnected().forEach(ReferenceCounted::release);
+        env.storage.release();
+        env.transporter.release();
+
+        if (closeListener != null) {
+            try {
+                closeListener.run();
+            } catch (Exception cause) {
+                if (logger.isWarnEnabled()) {
+                    logger.warn("caught unknown exception while executing close listener", cause);
+                }
+            }
+        }
+    }
+
+    private void stopParticipants(long timeout) throws Exception {
+        // follower has not proposer and acceptor
+        if (proposer != null) {
+            if (!proposer.close(timeout) && timeout > 0) {
+                logger.warn("can't close proposer({}) in specified time({})", id, timeout);
+            }
+        }
+        if (acceptor != null) {
+            close(acceptor, String.format("acceptor of group(%d)", id));
+        }
+
+        close(learner, String.format("leaner of group(%d)", id));
+        close(applier, String.format("applier of group(%d)", id));
+    }
+
+    private void close(AutoCloseable src, String id) throws Exception {
+        logger.info("Starts to close {}", id);
+        long begin = System.currentTimeMillis();
+        src.close();
+        logger.info("{} has been closed, execution time({})", id, System.currentTimeMillis() - begin);
+    }
+
+    private void shutdownTasks() {
+
+    }
+
+    @Override
+    public void addCloseListener(Runnable runner) {
+        this.closeListener = runner;
+    }
+
+    @Override
+    public void destroy() throws Exception {
+        synchronized (this) {
+            if (isClosed()) {
+                close(-1);
+            }
+
+            /*
+             * 2 things:
+             *
+             * 0. delete metadata
+             * 1. delete log data if we can
+             */
+
+            state = State.DESTROYED;
+        }
+    }
+
+    @Override
+    public boolean isClosed() {
+        return state == State.SHUTTING_DOWN || state == State.SHUTDOWN;
+    }
+
+    @Override
+    public String toString() {
+        return null;
     }
 
 }

@@ -38,6 +38,6 @@ public interface StateMachine {
     /**
      * Invoked when the Paxos group this state machine registered to is closed
      */
-    void onClosed();
+    void onGroupClosed();
 
 }

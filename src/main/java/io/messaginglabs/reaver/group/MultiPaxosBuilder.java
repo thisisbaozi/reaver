@@ -151,12 +151,12 @@ public class MultiPaxosBuilder implements PaxosBuilder {
             /*
              * releases resources if the group is closed
              */
-            group.addCloseListener(this::release);
+            group.addCloseListener(() -> close(group));
             return group;
         }
     }
 
-    private void release() {
+    private void close(InternalPaxosGroup group) {
         if (!externalTransporter) {
             try {
                 transporter.close();
@@ -172,6 +172,9 @@ public class MultiPaxosBuilder implements PaxosBuilder {
                 logger.warn("can't close storage", cause);
             }
         }
+
+        group.env().executor.shutdown();
+        group.env().applier.shutdown();
     }
 
     private GroupEnv initEnv(boolean debug, String path) throws Exception {
@@ -234,7 +237,5 @@ public class MultiPaxosBuilder implements PaxosBuilder {
         allocator = new PooledByteBufAllocator(useDirect);
         connector = new DefaultServerConnector();
     }
-
-
 
 }

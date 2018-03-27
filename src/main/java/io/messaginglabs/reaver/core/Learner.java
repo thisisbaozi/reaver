@@ -1,6 +1,6 @@
 package io.messaginglabs.reaver.core;
 
-public interface Learner {
+public interface Learner extends AutoCloseable {
 
     /**
      * Returns the max instance id this learner has learned

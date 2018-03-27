@@ -10,7 +10,8 @@ public interface PaxosGroup {
         RUNNING,
         FROZEN,
         SHUTTING_DOWN,
-        SHUTDOWN
+        SHUTDOWN,
+        DESTROYED,
     }
 
     int id();
@@ -45,7 +46,7 @@ public interface PaxosGroup {
      * Closes this group, refuses all commits and config control once a group
      * is closed.
      */
-    void close();
+    void close(long timeout) throws Exception;
 
     /**
      * Tell whether or not this group is closed.
@@ -56,6 +57,6 @@ public interface PaxosGroup {
      * Destroy this group, all metadata and log files associated with this group
      * will be deleted.
      */
-    void destroy();
+    void destroy() throws Exception;
 
 }

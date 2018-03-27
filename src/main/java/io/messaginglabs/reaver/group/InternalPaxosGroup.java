@@ -6,6 +6,7 @@ import io.messaginglabs.reaver.config.GroupConfigs;
 import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.core.InstanceCache;
 import io.messaginglabs.reaver.dsl.PaxosGroup;
+import io.messaginglabs.reaver.dsl.StateMachine;
 
 public interface InternalPaxosGroup extends PaxosGroup {
 
@@ -39,5 +40,6 @@ public interface InternalPaxosGroup extends PaxosGroup {
     Server server();
 
     void addCloseListener(Runnable runner);
+    StateMachine getStateMachine();
 
 }

@@ -1,6 +1,8 @@
 package io.messaginglabs.reaver.com;
 
-public interface ServerConnector {
+import io.netty.util.ReferenceCounted;
+
+public interface ServerConnector extends ReferenceCounted {
 
     Server connect(String ip, int port);
 

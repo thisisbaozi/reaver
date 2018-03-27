@@ -1,4 +1,7 @@
 package io.messaginglabs.reaver.core;
 
-public class Applier {
+public interface Applier extends AutoCloseable {
+
+
+
 }

@@ -16,6 +16,7 @@ public interface ConfigControl {
      * Calling {@link #join(List)} if this node wants to be an acceptor(proposer).
      */
     void follow(List<Node> nodes);
+    void follow(List<Node> nodes, long id);
 
     void join(List<Node> nodes);
     void leave();

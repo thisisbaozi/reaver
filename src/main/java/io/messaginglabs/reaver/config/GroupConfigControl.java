@@ -1,7 +1,10 @@
 package io.messaginglabs.reaver.config;
 
 import io.messaginglabs.reaver.com.Server;
+import io.messaginglabs.reaver.core.Defines;
+import io.messaginglabs.reaver.dsl.CheckpointStateMachine;
 import io.messaginglabs.reaver.dsl.ConfigControl;
+import io.messaginglabs.reaver.dsl.StateMachine;
 import io.messaginglabs.reaver.group.InternalPaxosGroup;
 import java.util.List;
 import java.util.Objects;
@@ -13,9 +16,13 @@ public class GroupConfigControl implements ConfigControl {
     private static final Logger logger = LoggerFactory.getLogger(GroupConfigControl.class);
 
     private final InternalPaxosGroup group;
+    private final GroupConfigs configs;
+
+    private boolean hasJoined = false;
 
     public GroupConfigControl(InternalPaxosGroup group) {
         this.group = group;
+        this.configs = group.configs();
     }
 
     @Override
@@ -23,19 +30,65 @@ public class GroupConfigControl implements ConfigControl {
         return null;
     }
 
-    @Override public void follow(List<Node> nodes) {
+    private static void isValid(List<Node> nodes) {
+        Objects.requireNonNull(nodes);
 
+        if (nodes.isEmpty()) {
+            throw new IllegalArgumentException("empty node set");
+        }
+    }
+
+    @Override
+    public void follow(List<Node> nodes) {
+        follow(nodes, Defines.VOID_INSTANCE_ID);
+    }
+
+    @Override
+    public void follow(List<Node> nodes, long id) {
+        isValid(nodes);
+
+        if (hasJoined) {
+            throw new IllegalStateException(
+                String.format("this node has joined a group(%d)", group.id())
+            );
+        }
+
+        // find a donor(a learner) from the given list if there's no a available config
+        //
+        long beginId = resolveBeginId(id);
+
+    }
+
+    private long resolveBeginId(long id) {
+        if (id > 0) {
+            return id;
+        }
+
+        StateMachine sm = group.getStateMachine();
+        if (sm == null) {
+            throw new IllegalStateException(
+                String.format("no state machine register to group(%d)", group.id())
+            );
+        }
+
+        if (sm instanceof CheckpointStateMachine) {
+            id = ((CheckpointStateMachine)sm).getCheckpoint();
+        }
+
+        if (id <= 0) {
+            // this follower is a new node, dump completed instances
+            // from 1 to last one.
+            id = 1;
+        }
+
+        return id;
     }
 
     @Override
     public void join(List<Node> nodes) {
-        Objects.requireNonNull(nodes, "nodes");
+        isValid(nodes);
 
-        if (nodes.isEmpty()) {
-            throw new IllegalArgumentException("no nodes");
-        }
-
-        if (hasJoined()) {
+        if (hasJoined) {
             throw new IllegalStateException(
                 String.format("this node has joined a group(%d)", group.id())
             );
@@ -84,9 +137,6 @@ public class GroupConfigControl implements ConfigControl {
         return result;
     }
 
-    private boolean hasJoined() {
-        return false;
-    }
 
     @Override
     public void leave() {
