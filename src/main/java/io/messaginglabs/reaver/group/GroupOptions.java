@@ -19,4 +19,7 @@ public class GroupOptions {
     public int leaseDuration;
     public ElectionPolicy policy;
     public LeaderSelector selector;
+
+    /* logging */
+    public String path;
 }

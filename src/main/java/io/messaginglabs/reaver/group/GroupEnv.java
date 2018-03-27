@@ -2,18 +2,12 @@ package io.messaginglabs.reaver.group;
 
 import io.messaginglabs.reaver.com.ServerConnector;
 import io.messaginglabs.reaver.com.Transporter;
-import io.messaginglabs.reaver.core.AlgorithmPhase;
-import io.messaginglabs.reaver.core.Sequencer;
-import io.messaginglabs.reaver.core.V0ValueCodec;
-import io.messaginglabs.reaver.core.ValueCodec;
 import io.messaginglabs.reaver.log.LogStorage;
 import io.netty.buffer.ByteBufAllocator;
 import java.util.concurrent.ScheduledExecutorService;
 import org.slf4j.Logger;
 
-public class GroupEnv {
-
-    private static ValueCodec DEFAULT_CODEC = new V0ValueCodec();
+public final class GroupEnv {
 
     public ByteBufAllocator allocator;
 
@@ -30,15 +24,11 @@ public class GroupEnv {
 
     public Transporter transporter;
     public ServerConnector connector;
-    public AlgorithmPhase phase = AlgorithmPhase.TWO_PHASE;
-    public ValueCodec codec = DEFAULT_CODEC;
-    public Sequencer sequencer;
+    public Logger logger;
 
     /*
      * run with debug mode or not.
      */
     public boolean debug = true;
-
-    public Logger logger;
 
 }

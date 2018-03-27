@@ -9,4 +9,5 @@ public interface ConfigStorage extends Closeable {
     void delete(int groupId);
     void write(int groupId, List<Config> configs) throws Exception;
 
+    List<Config> fetch(int groupId);
 }

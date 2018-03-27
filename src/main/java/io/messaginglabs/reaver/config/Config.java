@@ -11,7 +11,7 @@ public interface Config {
     Node node();
 
     int broadcast(Message msg);
-    long beginInstanceId();
+    long begin();
     /**
      * Returns the number of acceptors in this config
      */
@@ -21,4 +21,5 @@ public interface Config {
     void prepare(long instanceId, Proposal proposal);
 
     int majority();
+
 }

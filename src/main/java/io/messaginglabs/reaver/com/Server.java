@@ -28,4 +28,8 @@ public interface Server extends ReferenceCounted {
      */
     void observe(Consumer<Server.State> consumer);
 
+    /**
+     * Returns the last time when accessed this server
+     */
+    long time();
 }

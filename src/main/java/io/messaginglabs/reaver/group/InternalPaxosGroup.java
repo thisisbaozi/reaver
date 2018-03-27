@@ -1,12 +1,13 @@
 package io.messaginglabs.reaver.group;
 
+import io.messaginglabs.reaver.com.Server;
 import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.config.GroupConfigs;
 import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.core.InstanceCache;
-import io.messaginglabs.reaver.dsl.Group;
+import io.messaginglabs.reaver.dsl.PaxosGroup;
 
-public interface PaxosGroup extends Group {
+public interface InternalPaxosGroup extends PaxosGroup {
 
     void init();
     void start();
@@ -34,5 +35,9 @@ public interface PaxosGroup extends Group {
     int pendingCompletedInstances();
 
     InstanceCache cache();
+
+    Server server();
+
+    void addCloseListener(Runnable runner);
 
 }

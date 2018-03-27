@@ -1,23 +1,33 @@
 package io.messaginglabs.reaver.config;
 
 import io.messaginglabs.reaver.utils.FileSystemUtils;
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class SimpleConfigStorage implements ConfigStorage {
 
-    private static final String TMP_FILE_SUFFIX = ".tmp";
+    private static final String TMP_FILENAME_SUFFIX = ".tmp";
+    private static final String FILENAME_PREFIX = "group-config-";
+
+    private static final Logger logger = LoggerFactory.getLogger(SimpleConfigStorage.class);
 
     /*
      * config files are created under this directory
      */
     private final String dir;
+    private int num;
 
     public SimpleConfigStorage(String dir) {
         Objects.requireNonNull(dir, "dir");
@@ -34,19 +44,29 @@ public class SimpleConfigStorage implements ConfigStorage {
         } else {
             this.dir = dir + File.separator;
         }
+
+        this.num = 0;
     }
 
     @Override
     public void init() throws Exception {
+        File[] files = new File(this.dir).listFiles();
+        if (files == null || files.length == 0) {
+            return ;
+        }
 
+        /*
+         * ignores temporary files
+         */
+        this.num = (int)Arrays.stream(files).filter(file -> !file.getName().startsWith(FILENAME_PREFIX)).filter(file -> file.getName().endsWith(TMP_FILENAME_SUFFIX)).count();
     }
 
     private String toPath(int groupId) {
-        return String.format("%s%d", dir, groupId);
+        return dir + FILENAME_PREFIX + groupId;
     }
 
     private String toTmpPath(int groupId) {
-        return String.format("%s%d%d", dir, groupId, TMP_FILE_SUFFIX);
+        return dir + FILENAME_PREFIX + groupId + TMP_FILENAME_SUFFIX;
     }
 
     @Override
@@ -59,7 +79,10 @@ public class SimpleConfigStorage implements ConfigStorage {
         Objects.requireNonNull(configs, "configs");
 
         String tmp = toTmpPath(groupId);
-        String formal = toPath(groupId);
+        Path formal = Paths.get(toPath(groupId));
+
+        // it's a new config?
+        boolean newConfig = !formal.toFile().exists();
 
         /*
          * two phases:
@@ -68,11 +91,36 @@ public class SimpleConfigStorage implements ConfigStorage {
          * 1. move(atomic) temporary file to formal file
          */
         write(tmp, configs);
-        Files.move(Paths.get(tmp), Paths.get(formal), StandardCopyOption.ATOMIC_MOVE);
+        Files.move(Paths.get(tmp), formal, StandardCopyOption.ATOMIC_MOVE);
+
+        // warning if there're too many config files.
+        if (newConfig) {
+            num++;
+        }
+        if (num >= 64 && logger.isWarnEnabled()) {
+            logger.warn("too many config files({}) under directory({})", num, dir);
+        }
     }
 
     private void write(String path, List<Config> configs) throws IOException {
+        BufferedWriter bWriter = null;
+        FileWriter writer = new FileWriter(path);
+        try {
+            bWriter = new BufferedWriter(writer);
+            for (Config cfg : configs) {
+                String str = serialize(cfg);
+                bWriter.write(str);
+                bWriter.newLine();
+            }
 
+            // todo: checksum?
+
+            bWriter.flush();
+        } finally {
+            if (bWriter != null) {
+                bWriter.close();
+            }
+        }
     }
 
     private String serialize(Config config) {

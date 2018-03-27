@@ -34,6 +34,10 @@ public class RemoteServer extends AbstractReferenceCounted implements Server {
 
     }
 
+    @Override public long time() {
+        return 0;
+    }
+
     @Override public void areYouOk() {
 
     }

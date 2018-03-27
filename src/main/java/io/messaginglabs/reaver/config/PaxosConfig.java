@@ -8,16 +8,17 @@ import java.util.List;
 public class PaxosConfig implements Config {
 
     private int groupId;
+    private int comVersion;
 
     /*
      * A config
      */
-    private long instanceId;
+    private long reconfigureId;
 
     /*
      * instances  should execute based on this instance id
      */
-    private long beginInstanceId;
+    private long beginId;
 
     /*
      * servers in this config, this is immutable
@@ -25,9 +26,16 @@ public class PaxosConfig implements Config {
     private Server[] servers;
 
     /*
-     * acceptors in this config
+     * members in this config
      */
-    private List<Node> acceptors;
+    private List<Node> members;
+
+    public PaxosConfig(int groupId, long reconfigureId, long beginId, List<Node> members, Server[] servers) {
+        this.groupId = groupId;
+        this.reconfigureId = reconfigureId;
+        this.beginId = beginId;
+        this.members = members;
+    }
 
     @Override
     public Node node() {
@@ -55,7 +63,7 @@ public class PaxosConfig implements Config {
         return 0;
     }
 
-    @Override public long beginInstanceId() {
+    @Override public long begin() {
         return 0;
     }
 }

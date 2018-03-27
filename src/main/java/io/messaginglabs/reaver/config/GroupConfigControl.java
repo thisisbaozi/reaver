@@ -2,7 +2,7 @@ package io.messaginglabs.reaver.config;
 
 import io.messaginglabs.reaver.com.Server;
 import io.messaginglabs.reaver.dsl.ConfigControl;
-import io.messaginglabs.reaver.group.PaxosGroup;
+import io.messaginglabs.reaver.group.InternalPaxosGroup;
 import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -12,9 +12,9 @@ public class GroupConfigControl implements ConfigControl {
 
     private static final Logger logger = LoggerFactory.getLogger(GroupConfigControl.class);
 
-    private final PaxosGroup group;
+    private final InternalPaxosGroup group;
 
-    public GroupConfigControl(PaxosGroup group) {
+    public GroupConfigControl(InternalPaxosGroup group) {
         this.group = group;
     }
 

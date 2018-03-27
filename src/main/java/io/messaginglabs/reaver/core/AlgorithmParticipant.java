@@ -2,7 +2,7 @@ package io.messaginglabs.reaver.core;
 
 import io.messaginglabs.reaver.debug.RunningEvent;
 import io.messaginglabs.reaver.debug.RunningEvents;
-import io.messaginglabs.reaver.group.PaxosGroup;
+import io.messaginglabs.reaver.group.InternalPaxosGroup;
 import java.util.Objects;
 
 public abstract class AlgorithmParticipant implements Participant {
@@ -10,14 +10,14 @@ public abstract class AlgorithmParticipant implements Participant {
     /*
      * the group this algorithm participant belongs to
      */
-    protected final PaxosGroup group;
+    protected final InternalPaxosGroup group;
 
     /*
      * the thread is response for processing
      */
     private Thread thread;
 
-    public AlgorithmParticipant(PaxosGroup group) {
+    public AlgorithmParticipant(InternalPaxosGroup group) {
         this.group = Objects.requireNonNull(group, "group");
     }
 
@@ -38,7 +38,7 @@ public abstract class AlgorithmParticipant implements Participant {
     }
 
     @Override
-    public PaxosGroup group() {
+    public InternalPaxosGroup group() {
         return group;
     }
 

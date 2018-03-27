@@ -3,7 +3,7 @@ package io.messaginglabs.reaver.core;
 import io.messaginglabs.reaver.com.msg.Prepare;
 import io.messaginglabs.reaver.com.msg.AcceptorReply;
 import io.messaginglabs.reaver.com.msg.Propose;
-import io.messaginglabs.reaver.group.PaxosGroup;
+import io.messaginglabs.reaver.group.InternalPaxosGroup;
 import java.util.Objects;
 
 public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
@@ -17,7 +17,7 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
      */
     private final AcceptorReply reply;
 
-    public ParallelAcceptor(PaxosGroup group) {
+    public ParallelAcceptor(InternalPaxosGroup group) {
         super(group);
 
         this.cache = group.cache();

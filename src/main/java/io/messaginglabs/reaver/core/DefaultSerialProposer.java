@@ -5,9 +5,9 @@ import io.messaginglabs.reaver.com.msg.AcceptorReply;
 import io.messaginglabs.reaver.config.Config;
 import io.messaginglabs.reaver.config.GroupConfigs;
 import io.messaginglabs.reaver.dsl.CommitResult;
-import io.messaginglabs.reaver.dsl.Group;
+import io.messaginglabs.reaver.dsl.PaxosGroup;
 import io.messaginglabs.reaver.group.GroupEnv;
-import io.messaginglabs.reaver.group.PaxosGroup;
+import io.messaginglabs.reaver.group.InternalPaxosGroup;
 import io.messaginglabs.reaver.utils.AddressUtils;
 import io.netty.buffer.ByteBuf;
 import java.util.List;
@@ -30,8 +30,9 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
      * expired
      */
     private final ScheduledFuture<?> task;
+    private final Sequencer sequencer;
 
-    public DefaultSerialProposer(int id, PaxosGroup group) {
+    public DefaultSerialProposer(int id, Sequencer sequencer, InternalPaxosGroup group) {
         super(group);
 
 
@@ -46,6 +47,8 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         }
 
         this.id = id;
+        this.sequencer = sequencer;
+
         this.ctx = new ProposeContext();
         this.ctx.set(buf);
 
@@ -111,7 +114,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     }
 
     private void process() {
-        if (group.state() != Group.State.RUNNING) {
+        if (group.state() != PaxosGroup.State.RUNNING) {
             /*
              * fail commits if any
              */
@@ -195,14 +198,14 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             );
         }
 
-        return configs.find(instanceId);
+        return configs.match(instanceId);
     }
 
     private boolean readyToRun() {
         /*
          * this proposer is able to go ahead unless:
          *
-         * 0. find a free instance
+         * 0. match a free instance
          * 1. it's not necessary to slow down
          */
         long instanceId = acquire();
@@ -221,7 +224,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             return false;
         }
 
-        // find a config based on acquired instance id, if no config
+        // match a config based on acquired instance id, if no config
         // is available, fail commits
         Config config = find(instanceId);
         if (config == null) {
@@ -257,7 +260,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             return false;
         }
 
-        group.env().sequencer.set(instanceId);
+        sequencer.set(instanceId);
         ctx.reset(instanceId, config, group.local().id());
 
         return true;
@@ -312,10 +315,6 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     }
 
     private AlgorithmPhase getPhase() {
-        if (group.env().phase == AlgorithmPhase.THREE_PHASE) {
-            return AlgorithmPhase.THREE_PHASE;
-        }
-
         return ctx.phase();
     }
 
@@ -382,7 +381,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
     private long acquire() {
         /*
-         * find a sequence number for a new ctx, must ensure that
+         * match a sequence number for a new ctx, must ensure that
          * no ctx associated with the new sequence.
          */
         InstanceCache cache = group.cache();
@@ -391,7 +390,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         }
 
         int span = 0;
-        long instanceId = group.env().sequencer.get();
+        long instanceId = sequencer.get();
 
         for (;;) {
             span++;
@@ -549,7 +548,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
         if (ctx.instance() == null) {
             if (isDebug()) {
-                logger.info("ignore reply({}), can't find a instance associated with it", reply.toString());
+                logger.info("ignore reply({}), can't match a instance associated with it", reply.toString());
             }
 
             return true;

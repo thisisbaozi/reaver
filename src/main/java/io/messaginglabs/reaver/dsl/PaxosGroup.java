@@ -3,7 +3,7 @@ package io.messaginglabs.reaver.dsl;
 import java.nio.ByteBuffer;
 import java.util.function.Consumer;
 
-public interface Group {
+public interface PaxosGroup {
 
     enum State {
         NOT_STARTED,

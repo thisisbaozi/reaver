@@ -2,7 +2,7 @@ package io.messaginglabs.reaver.core;
 
 import io.messaginglabs.reaver.dsl.Commit;
 import io.messaginglabs.reaver.dsl.CommitResult;
-import io.messaginglabs.reaver.dsl.Group;
+import io.messaginglabs.reaver.dsl.PaxosGroup;
 import io.messaginglabs.reaver.group.MultiPaxosGroup;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -65,7 +65,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
 
     @Override
     public CommitResult commit(ByteBuffer value, Object attachment) {
-        if (group().state() == Group.State.FROZEN) {
+        if (group().state() == PaxosGroup.State.FROZEN) {
             return CommitResult.FROZEN_GROUP;
         }
 
@@ -78,7 +78,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
     public Commit commit(ByteBuffer value) {
         GenericCommit commit = newCommit(value, null);
 
-        if (group().state() == Group.State.FROZEN) {
+        if (group().state() == PaxosGroup.State.FROZEN) {
             commit.setFailure(CommitResult.FROZEN_GROUP);
             return commit;
         }
@@ -161,10 +161,10 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
             SerialProposer proposer = find();
             if (proposer == null) {
                 /*
-                 * can't find a free proposer, try again later
+                 * can't match a free proposer, try again later
                  */
                 if (logger.isDebugEnabled()) {
-                    logger.warn("can't find a free proposer from group({}), proposers({})", group().id(), dumpProposersState());
+                    logger.warn("can't match a free proposer from group({}), proposers({})", group().id(), dumpProposersState());
                 }
 
                 // do statistics

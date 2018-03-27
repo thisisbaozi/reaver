@@ -2,6 +2,8 @@ package io.messaginglabs.reaver;
 
 import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.core.VotersCounter;
+import io.netty.util.collection.IntObjectHashMap;
+import io.netty.util.collection.IntObjectMap;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -71,6 +73,7 @@ public class TestUtils {
 
     @Test
     public void testBallotCompare() throws Exception {
+
     }
 
 }

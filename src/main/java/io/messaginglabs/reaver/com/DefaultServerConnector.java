@@ -10,12 +10,8 @@ public class DefaultServerConnector implements ServerConnector {
     private final int count;
     private final Map<String, List<Server>> servers;
 
-    public DefaultServerConnector(int count) {
-        if (count < 0) {
-            throw new IllegalArgumentException("count must be 0 or positive number, but given: " + count);
-        }
-
-        this.count = count;
+    public DefaultServerConnector() {
+        this.count = 1;
         this.servers = new HashMap<>();
     }
 
@@ -53,5 +49,4 @@ public class DefaultServerConnector implements ServerConnector {
             return server;
         }
     }
-
 }

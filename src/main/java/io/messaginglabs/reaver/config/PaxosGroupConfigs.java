@@ -1,7 +1,8 @@
 package io.messaginglabs.reaver.config;
 
+import io.messaginglabs.reaver.com.Server;
 import io.messaginglabs.reaver.core.Value;
-import io.messaginglabs.reaver.group.PaxosGroup;
+import io.messaginglabs.reaver.group.InternalPaxosGroup;
 import io.messaginglabs.reaver.utils.ContainerUtils;
 import io.netty.buffer.ByteBuf;
 import java.util.ArrayList;
@@ -20,27 +21,52 @@ public class PaxosGroupConfigs implements GroupConfigs {
 
     private static final Logger logger = LoggerFactory.getLogger(PaxosGroupConfigs.class);
 
-    private final PaxosGroup group;
+    private final InternalPaxosGroup group;
     private ConfigStorage storage;
 
     /*
      * configs are still usable, the element at 0 is oldest config, size - 1
      * is the newest config.
      */
-    private List<PaxosConfig> configs = new ArrayList<>();
+    private List<Config> configs = new ArrayList<>();
 
-    public PaxosGroupConfigs(PaxosGroup group) {
+    public PaxosGroupConfigs(InternalPaxosGroup group) {
         this(group, null);
     }
 
-    public PaxosGroupConfigs(PaxosGroup group, ConfigStorage storage) {
+    public PaxosGroupConfigs(InternalPaxosGroup group, ConfigStorage storage) {
         this.group = Objects.requireNonNull(group, "group");
 
         // do nothing when configs is changed if storage is null
         this.storage = storage;
+        initConfigs();
     }
 
-    private void isApplicable(Value value) {
+    private void initConfigs() {
+        if (storage != null) {
+            configs.addAll(storage.fetch(group.id()));
+
+            /*
+             * sorts configs order by begin instance id
+             */
+            configs.sort((o1, o2) -> {
+                if (o1.begin() == o2.begin()) {
+                    // a bug?
+                    throw new IllegalStateException(
+                        String.format("two configs(first=%s, second=%s) have same begin id(%d)", o1.toString(), o2.toString(), o1.begin())
+                    );
+                }
+
+                return Long.compare(o1.begin(), o2.begin());
+            });
+
+            if (logger.isInfoEnabled()) {
+                logger.info("init configs({}) of group({}) from storage", ContainerUtils.toString(configs, "configs"), group.id());
+            }
+        }
+    }
+
+    private void check(Value value) {
         Objects.requireNonNull(value, "value");
 
         if (!value.isChosen()) {
@@ -61,16 +87,57 @@ public class PaxosGroupConfigs implements GroupConfigs {
     }
 
     @Override
-    public Node add(Value value) {
-        isApplicable(value);
+    public void initConfig(List<Node> members) {
+        if (configs.isEmpty()) {
+            configs.add(build(0,1, members));
+            sync();
+            return ;
+        }
 
-        return null;
+        logger.info("ignore config members, group({}) has a number of configs({})", group.id(), ContainerUtils.toString(configs, "configs"));
     }
 
-    @Override
-    public Node remove(Value value) {
-        isApplicable(value);
-        return null;
+    private PaxosConfig build(long reconfigureId, long beginId, List<Node> members) {
+        Objects.requireNonNull(members, "members");
+
+        if (members.isEmpty()) {
+            throw new IllegalArgumentException("can't build a empty config(no members)");
+        }
+
+        if (reconfigureId > beginId) {
+            throw new IllegalArgumentException(
+                String.format("reconfigure id(%d) should be smaller than begin id(%d)", reconfigureId, beginId)
+            );
+        }
+
+        // filter duplicated nods
+        List<Node> copy = new ArrayList<>();
+        for (Node member : members) {
+            if (!copy.contains(member)) {
+                copy.add(member);
+            }
+        }
+
+        // connect with each member
+        int idx = 0;
+        Server[] servers = new Server[copy.size()];
+        for (Node member : copy) {
+            Server server;
+            if (member.equals(group.local())) {
+                server = group.server();
+            } else {
+                server = group.env().connector.connect(member.getIp(), member.getPort());
+            }
+
+            if (server == null) {
+                throw new IllegalStateException("can't connect with node: " + member.toString());
+            }
+
+            servers[idx] = server;
+            idx++;
+        }
+
+        return new PaxosConfig(group.id(), reconfigureId, beginId, copy, servers);
     }
 
     private boolean isUsable(long instanceId, Config config) {
@@ -85,7 +152,7 @@ public class PaxosGroupConfigs implements GroupConfigs {
          * instances which's id is greater than the begin instance of
          * this config are able to run with this config.
          */
-        return instanceId >= config.beginInstanceId();
+        return instanceId >= config.begin();
     }
 
     @Override
@@ -155,10 +222,19 @@ public class PaxosGroupConfigs implements GroupConfigs {
     }
 
     @Override
-    public Config find(long sequence) {
-        if (sequence < 0) {
-            throw new IllegalArgumentException("invalid sequence: " + sequence);
+    public Config match(long instanceId) {
+        int size = configs.size();
+        for (int i = size - 1; i >= 0; i--) {
+            Config config = configs.get(i);
+            if (config == null) {
+                throw new NullPointerException("null config in configs");
+            }
+
+            if (isUsable(instanceId, config)) {
+                return config;
+            }
         }
+
         return null;
     }
 }

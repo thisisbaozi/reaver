@@ -77,4 +77,12 @@ public final class Crc32 {
         return current << 8 ^ table[(current >> 24 ^ value) & 0xff];
     }
 
+    public static int get(byte[] src, int crc32, int offset, int len) {
+        return 0;
+    }
+    public static int get(byte[] src, int crc32) {
+        return 0;
+    }
+
+
 }
