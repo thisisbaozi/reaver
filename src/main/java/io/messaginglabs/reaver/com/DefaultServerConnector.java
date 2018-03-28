@@ -1,11 +1,13 @@
 package io.messaginglabs.reaver.com;
 
+import io.netty.util.AbstractReferenceCounted;
+import io.netty.util.ReferenceCounted;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class DefaultServerConnector implements ServerConnector {
+public class DefaultServerConnector extends AbstractReferenceCounted implements ServerConnector {
 
     private final int count;
     private final Map<String, List<Server>> servers;
@@ -13,6 +15,13 @@ public class DefaultServerConnector implements ServerConnector {
     public DefaultServerConnector() {
         this.count = 1;
         this.servers = new HashMap<>();
+    }
+
+    @Override
+    protected void deallocate() {
+        synchronized (this) {
+
+        }
     }
 
     @Override
@@ -48,5 +57,10 @@ public class DefaultServerConnector implements ServerConnector {
             server.retain();
             return server;
         }
+    }
+
+    @Override
+    public ReferenceCounted touch(Object hint) {
+        return this;
     }
 }

@@ -1,13 +1,16 @@
 package io.messaginglabs.reaver.config;
 
 import io.messaginglabs.reaver.com.Server;
-import io.messaginglabs.reaver.core.Defines;
+import io.messaginglabs.reaver.core.FollowContext;
 import io.messaginglabs.reaver.dsl.CheckpointStateMachine;
 import io.messaginglabs.reaver.dsl.ConfigControl;
 import io.messaginglabs.reaver.dsl.StateMachine;
 import io.messaginglabs.reaver.group.InternalPaxosGroup;
+import io.messaginglabs.reaver.utils.ContainerUtils;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,6 +22,9 @@ public class GroupConfigControl implements ConfigControl {
     private final GroupConfigs configs;
 
     private boolean hasJoined = false;
+
+    // promises
+    private CompletableFuture<ConfigView> future;
 
     public GroupConfigControl(InternalPaxosGroup group) {
         this.group = group;
@@ -39,24 +45,9 @@ public class GroupConfigControl implements ConfigControl {
     }
 
     @Override
-    public void follow(List<Node> nodes) {
-        follow(nodes, Defines.VOID_INSTANCE_ID);
-    }
-
-    @Override
-    public void follow(List<Node> nodes, long id) {
-        isValid(nodes);
-
-        if (hasJoined) {
-            throw new IllegalStateException(
-                String.format("this node has joined a group(%d)", group.id())
-            );
-        }
-
-        // find a donor(a learner) from the given list if there's no a available config
-        //
-        long beginId = resolveBeginId(id);
-
+    public FollowContext follow(List<Node> nodes) {
+        //follow(nodes, Defines.VOID_INSTANCE_ID);
+        return null;
     }
 
     private long resolveBeginId(long id) {
@@ -85,43 +76,66 @@ public class GroupConfigControl implements ConfigControl {
     }
 
     @Override
-    public void join(List<Node> nodes) {
-        isValid(nodes);
+    public Future<ConfigView> join(List<Node> members) {
+        synchronized (this) {
+            Config config = configs.newest();
+            if (config != null) {
+                logger.info("this node({}) has already joined the group({})", ContainerUtils.toString(config.members(), "members"), group.id());
 
-        if (hasJoined) {
-            throw new IllegalStateException(
-                String.format("this node has joined a group(%d)", group.id())
-            );
-        }
+                if (future != null) {
+                    return future;
+                }
 
-        /*
-         * Either this node is a new one of a group and others are active, or
-         * it's the boot node(first one to start)
-         */
-        boolean joined = false;
-        for (Node node : nodes) {
-            if (node.equals(group.local())) {
-                continue;
+                future = new CompletableFuture<>();
+                future.complete(config.view());
+
+                return future;
             }
 
-            if (add(node)) {
-                joined = true;
-                logger.info("node({}) is response for adding this node({}, group({}))", node.toString(), group.local().toString(), group.id());
-
-                break;
-            }
-        }
-
-        if (!joined) {
-            /*
-             * this node is the boot node of the group?
-             */
-            logger.info("can't join the group through nodes({}), this node could be boot node", Nodes.dump(nodes));
-            group.boot();
+            return doJoin(members);
         }
     }
 
-    private boolean add(Node node) {
+    private Future<ConfigView> doJoin(List<Node> members) {
+        isValid(members);
+
+        if (logger.isInfoEnabled()) {
+            logger.info(
+                "this node({}) try to join the group({}) based on the given donors({})",
+                group.local().toString(),
+                group.id(),
+                ContainerUtils.toString(members, "members")
+            );
+        }
+
+        if (future != null) {
+            return future;
+        }
+
+        boolean result = false;
+        for (Node member : members) {
+            if (!member.equals(group.local()) && join(member)) {
+                result = true;
+                logger.info("join the group({}) through the member({})", group.id(), member.toString());
+
+                break;
+            }
+
+            logger.info("can't join the group({}) through the member({})", group.id(), member.toString());
+        }
+
+        if (result) {
+            hasJoined = true;
+        } else {
+            throw new IllegalStateException(
+                String.format("can't join the group(%d) through %s", group.id(), ContainerUtils.toString(members, "members"))
+            );
+        }
+
+        return (future = new CompletableFuture<>());
+    }
+
+    private boolean join(Node node) {
         /*
          * connect with the given node and send it a message that this node
          * want to join the group
@@ -137,10 +151,9 @@ public class GroupConfigControl implements ConfigControl {
         return result;
     }
 
-
     @Override
-    public void leave() {
-
+    public Future<Boolean> leave() {
+        return null;
     }
 
     @Override

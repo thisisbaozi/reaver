@@ -2,8 +2,16 @@ package io.messaginglabs.reaver.group;
 
 import io.messaginglabs.reaver.com.Server;
 import io.messaginglabs.reaver.com.msg.Message;
+import io.messaginglabs.reaver.config.Config;
+import io.messaginglabs.reaver.config.ConfigEventsListener;
+import io.messaginglabs.reaver.config.ConfigView;
+import io.messaginglabs.reaver.config.GroupConfigControl;
+import io.messaginglabs.reaver.config.MetadataStorage;
+import io.messaginglabs.reaver.config.PaxosGroupConfigs;
+import io.messaginglabs.reaver.config.SimpleConfigStorage;
 import io.messaginglabs.reaver.core.Acceptor;
 import io.messaginglabs.reaver.core.Applier;
+import io.messaginglabs.reaver.core.FollowContext;
 import io.messaginglabs.reaver.core.InstanceCache;
 import io.messaginglabs.reaver.core.Learner;
 import io.messaginglabs.reaver.dsl.ConfigControl;
@@ -17,7 +25,9 @@ import io.messaginglabs.reaver.dsl.GroupStatistics;
 import io.messaginglabs.reaver.dsl.StateMachine;
 import io.netty.util.ReferenceCounted;
 import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.Future;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,36 +37,68 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
 
     // global unique identifier
     private final int id;
+    private PaxosGroup.State state;
+    private PaxosGroup.Role role;
+
     private final GroupEnv env;
     private final GroupOptions options;
 
-    private PaxosGroup.State state;
     private String msg;
 
-    private GroupConfigs configs;
     private Proposer proposer;
     private Acceptor acceptor;
     private Learner learner;
     private Applier applier;
     private StateMachine sm;
 
+    // config
+    private final GroupConfigs configs;
+
     private Runnable closeListener;
 
-    public MultiPaxosGroup(int id, GroupEnv env, GroupOptions options) {
+    public MultiPaxosGroup(int id, StateMachine sm,  GroupEnv env, GroupOptions options) {
         this.env = Objects.requireNonNull(env, "env");
         this.options = Objects.requireNonNull(options, "options");
+        this.sm = Objects.requireNonNull(sm, "stateMachine");
 
         this.id = id;
-        this.state = PaxosGroup.State.NOT_STARTED;
+        this.state = State.NOT_STARTED;
+        this.role = Role.UNKNOWN;
+
+        MetadataStorage storage = null;
+        if (options.reserveConfig) {
+            storage = env.metadataStorage;
+        } else {
+            /*
+             * Disabling storing config does not affect the correctness of
+             * Paxos
+             */
+            logger.info("group({}) do not store config", id);
+        }
+
+        configs = new PaxosGroupConfigs(this, storage);
     }
 
     @Override
-    public void init() {
-
+    public final State state() {
+        return state;
     }
 
     public final int id() {
         return id;
+    }
+
+    @Override
+    public final Role role() {
+        return role;
+    }
+
+    @Override
+    public Future<ConfigView> join(List<Node> members) {
+        synchronized (configs) {
+            Config config = configs.newest();
+        }
+        return null;
     }
 
     @Override
@@ -103,11 +145,6 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
     @Override
     public Server server() {
         return null;
-    }
-
-    @Override
-    public void register(StateMachine sm) {
-        this.sm = Objects.requireNonNull(sm, "sm");
     }
 
     @Override
@@ -167,11 +204,6 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
     }
 
     @Override
-    public ConfigControl config() {
-        return null;
-    }
-
-    @Override
     public GroupStatistics statistics() {
         return null;
     }
@@ -211,9 +243,25 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
 
     }
 
-    @Override
-    public State state() {
-        return state;
+    @Override public ConfigView view() {
+        return null;
+    }
+
+    @Override public FollowContext follow(List<Node> nodes) {
+        return null;
+    }
+
+
+    @Override public Future<Boolean> leave() {
+        return null;
+    }
+
+    @Override public void add(ConfigEventsListener listener) {
+
+    }
+
+    @Override public void remove(ConfigEventsListener listener) {
+
     }
 
     @Override
@@ -293,6 +341,11 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
     @Override
     public void addCloseListener(Runnable runner) {
         this.closeListener = runner;
+    }
+
+    @Override
+    public StateMachine getStateMachine() {
+        return null;
     }
 
     @Override

@@ -3,7 +3,9 @@ package io.messaginglabs.reaver.dsl;
 import io.messaginglabs.reaver.config.ConfigEventsListener;
 import io.messaginglabs.reaver.config.ConfigView;
 import io.messaginglabs.reaver.config.Node;
+import io.messaginglabs.reaver.core.FollowContext;
 import java.util.List;
+import java.util.concurrent.Future;
 
 public interface ConfigControl {
 
@@ -15,11 +17,10 @@ public interface ConfigControl {
      *
      * Calling {@link #join(List)} if this node wants to be an acceptor(proposer).
      */
-    void follow(List<Node> nodes);
-    void follow(List<Node> nodes, long id);
+    FollowContext follow(List<Node> nodes);
 
-    void join(List<Node> nodes);
-    void leave();
+    Future<ConfigView> join(List<Node> members);
+    Future<Boolean> leave();
 
     void add(ConfigEventsListener listener);
     void remove(ConfigEventsListener listener);

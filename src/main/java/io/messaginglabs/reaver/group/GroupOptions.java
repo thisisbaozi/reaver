@@ -12,6 +12,7 @@ public class GroupOptions {
     public int retryInterval;
     public int useConfigSpan;
 
+    public boolean reserveConfig;
     public boolean statistics;
 
     /* leader */

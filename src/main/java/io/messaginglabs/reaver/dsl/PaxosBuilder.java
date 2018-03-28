@@ -28,6 +28,6 @@ public interface PaxosBuilder {
     void setNode(Node node);
     void setTransporter(Transporter transporter);
 
-    PaxosGroup build() throws Exception;
+    PaxosGroup build(StateMachine stateMachine) throws Exception;
 
 }

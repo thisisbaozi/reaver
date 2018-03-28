@@ -1,6 +1,12 @@
 package io.messaginglabs.reaver.dsl;
 
+import io.messaginglabs.reaver.config.ConfigEventsListener;
+import io.messaginglabs.reaver.config.ConfigView;
+import io.messaginglabs.reaver.config.Node;
+import io.messaginglabs.reaver.core.FollowContext;
 import java.nio.ByteBuffer;
+import java.util.List;
+import java.util.concurrent.Future;
 import java.util.function.Consumer;
 
 public interface PaxosGroup {
@@ -14,13 +20,28 @@ public interface PaxosGroup {
         DESTROYED,
     }
 
+    enum Role {
+
+        UNKNOWN,
+
+        /*
+         * it's able to propose value through this node and this node is
+         * also vote for values.
+         */
+        FORMAL,
+
+        /*
+         * this node only learn chosen values from a provider.
+         */
+        FOLLOWER,
+    }
+
     int id();
 
     /**
-     * Registers a state machine with this group, the registered state machine
-     * is response for processing chosen values.
+     * Returns the role of this group
      */
-    void register(StateMachine machine);
+    Role role();
 
     /**
      * Commits a value, the commit handle is used to know the result in asynchronous
@@ -34,7 +55,27 @@ public interface PaxosGroup {
      */
     CommitResult commit(ByteBuffer value, Object att);
 
-    ConfigControl config();
+    /* config interface */
+
+    ConfigView view();
+
+    /**
+     * Selects a donor from ths given member list and learn chosen values from it. The follower
+     * try to match a new donor from last config view if the old donor is inactive.
+     *
+     * Calling {@link #join(List)} if this node wants to be an acceptor(proposer).
+     */
+    FollowContext follow(List<Node> nodes);
+
+    /**
+     * Joins the group though the given seed nodes
+     */
+    Future<ConfigView> join(List<Node> members);
+    Future<Boolean> leave();
+
+    void add(ConfigEventsListener listener);
+    void remove(ConfigEventsListener listener);
+
     GroupStatistics statistics();
 
     /**

@@ -14,4 +14,6 @@ public interface GroupConfigs {
     List<Server> serversConnected();
 
     Config newest();
+
+    int size();
 }

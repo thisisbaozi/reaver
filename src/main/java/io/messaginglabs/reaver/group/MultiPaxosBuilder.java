@@ -9,6 +9,7 @@ import io.messaginglabs.reaver.dsl.ElectionPolicy;
 import io.messaginglabs.reaver.dsl.PaxosGroup;
 import io.messaginglabs.reaver.dsl.PaxosBuilder;
 import io.messaginglabs.reaver.dsl.LeaderSelector;
+import io.messaginglabs.reaver.dsl.StateMachine;
 import io.messaginglabs.reaver.log.DefaultLogStorage;
 import io.messaginglabs.reaver.log.LogStorage;
 import io.messaginglabs.reaver.utils.AddressUtils;
@@ -37,7 +38,6 @@ public class MultiPaxosBuilder implements PaxosBuilder {
             address = AddressUtils.resolveIpV4();
         } catch (SocketException e) {
             cause = e;
-
         }
 
         if (address == null) {
@@ -141,11 +141,13 @@ public class MultiPaxosBuilder implements PaxosBuilder {
     }
 
     @Override
-    public PaxosGroup build() throws Exception {
+    public PaxosGroup build(StateMachine stateMachine) throws Exception {
+        Objects.requireNonNull(stateMachine, "stateMachine");
+
         synchronized (this) {
             init();
 
-            InternalPaxosGroup group = new MultiPaxosGroup(id, initEnv(debug, path), options);
+            InternalPaxosGroup group = new MultiPaxosGroup(id, stateMachine, initEnv(debug, path), options);
             transporter.setConsumer(group::process);
 
             /*

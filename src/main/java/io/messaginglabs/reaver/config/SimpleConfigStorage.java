@@ -16,7 +16,7 @@ import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class SimpleConfigStorage implements ConfigStorage {
+public class SimpleConfigStorage implements MetadataStorage {
 
     private static final String TMP_FILENAME_SUFFIX = ".tmp";
     private static final String FILENAME_PREFIX = "group-config-";
@@ -100,6 +100,10 @@ public class SimpleConfigStorage implements ConfigStorage {
         if (num >= 64 && logger.isWarnEnabled()) {
             logger.warn("too many config files({}) under directory({})", num, dir);
         }
+    }
+
+    @Override public List<Config> fetch(int groupId) {
+        return null;
     }
 
     private void write(String path, List<Config> configs) throws IOException {

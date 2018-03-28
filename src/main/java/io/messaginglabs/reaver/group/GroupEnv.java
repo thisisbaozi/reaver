@@ -2,6 +2,7 @@ package io.messaginglabs.reaver.group;
 
 import io.messaginglabs.reaver.com.ServerConnector;
 import io.messaginglabs.reaver.com.Transporter;
+import io.messaginglabs.reaver.config.MetadataStorage;
 import io.messaginglabs.reaver.log.LogStorage;
 import io.netty.buffer.ByteBufAllocator;
 import java.util.concurrent.ScheduledExecutorService;
@@ -15,6 +16,7 @@ public final class GroupEnv {
      * Either each group owns a exclusive storage, or share with other groups.
      */
     public LogStorage storage;
+    public MetadataStorage metadataStorage;
 
     /*
      * this executor is response for processing all events of a specified group

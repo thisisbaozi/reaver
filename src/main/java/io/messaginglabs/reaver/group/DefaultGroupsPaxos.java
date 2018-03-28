@@ -133,7 +133,7 @@ public final class DefaultGroupsPaxos implements GroupsPaxos {
              * 0. close active groups
              * 1. close resource(executors, storage, RPC)
              */
-            groups.values().forEach(PaxosGroup::close);
+            // groups.values().forEach(PaxosGroup::close);
 
 
         }

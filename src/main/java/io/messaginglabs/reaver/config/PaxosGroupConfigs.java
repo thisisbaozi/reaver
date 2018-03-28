@@ -22,7 +22,7 @@ public class PaxosGroupConfigs implements GroupConfigs {
     private static final Logger logger = LoggerFactory.getLogger(PaxosGroupConfigs.class);
 
     private final InternalPaxosGroup group;
-    private ConfigStorage storage;
+    private MetadataStorage storage;
 
     /*
      * configs are still usable, the element at 0 is oldest config, size - 1
@@ -34,7 +34,7 @@ public class PaxosGroupConfigs implements GroupConfigs {
         this(group, null);
     }
 
-    public PaxosGroupConfigs(InternalPaxosGroup group, ConfigStorage storage) {
+    public PaxosGroupConfigs(InternalPaxosGroup group, MetadataStorage storage) {
         this.group = Objects.requireNonNull(group, "group");
 
         // do nothing when configs is changed if storage is null
@@ -235,6 +235,14 @@ public class PaxosGroupConfigs implements GroupConfigs {
             }
         }
 
+        return null;
+    }
+
+    @Override public List<Server> serversConnected() {
+        return null;
+    }
+
+    @Override public Config newest() {
         return null;
     }
 }

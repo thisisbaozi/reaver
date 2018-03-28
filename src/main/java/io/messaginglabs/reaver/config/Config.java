@@ -2,6 +2,7 @@ package io.messaginglabs.reaver.config;
 
 import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.core.Proposal;
+import java.util.List;
 
 public interface Config {
 
@@ -22,4 +23,7 @@ public interface Config {
 
     int majority();
 
+    List<Node> members();
+
+    ConfigView view();
 }
