@@ -7,6 +7,15 @@ public class Ballot {
     protected int sequence;
     protected long nodeId;
 
+    public Ballot() {
+
+    }
+
+    public Ballot(int sequence, long nodeId) {
+        this.sequence = sequence;
+        this.nodeId = nodeId;
+    }
+
     public int getSequence() {
         return sequence;
     }

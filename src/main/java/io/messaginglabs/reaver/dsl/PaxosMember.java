@@ -1,6 +1,6 @@
 package io.messaginglabs.reaver.dsl;
 
-public interface GroupMember {
+public interface PaxosMember {
 
     /**
      * Returns the address of this member in format(ip:port), the returned

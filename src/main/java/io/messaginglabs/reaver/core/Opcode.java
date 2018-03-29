@@ -12,7 +12,7 @@ public enum Opcode {
 
 
     // config
-    ADD_NODE(8),
+    JOIN_GROUP(8),
     REMOVE_NODE(9),
     FORCE_CONFIG(10),
 
@@ -25,5 +25,19 @@ public enum Opcode {
 
     Opcode(int value) {
         this.value = value;
+    }
+
+    public boolean isJoinGroup() {
+        return this == JOIN_GROUP;
+    }
+
+    public static Opcode match(int value) {
+        for (Opcode opcode : Opcode.values()) {
+            if (opcode.value == value) {
+                return opcode;
+            }
+        }
+
+        return null;
     }
 }

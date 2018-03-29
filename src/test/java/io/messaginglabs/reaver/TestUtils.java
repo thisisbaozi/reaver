@@ -1,7 +1,9 @@
 package io.messaginglabs.reaver;
 
 import io.messaginglabs.reaver.config.Node;
+import io.messaginglabs.reaver.core.Ballot;
 import io.messaginglabs.reaver.core.VotersCounter;
+import io.messaginglabs.reaver.utils.AddressUtils;
 import io.netty.util.collection.IntObjectHashMap;
 import io.netty.util.collection.IntObjectMap;
 import org.junit.Assert;
@@ -73,7 +75,16 @@ public class TestUtils {
 
     @Test
     public void testBallotCompare() throws Exception {
+        String ip = "127.0.0.1";
+        long nodeId = AddressUtils.composite(ip, 4001);
 
+        Ballot ballot1 = new Ballot(1, nodeId);
+        Ballot.CompareResult result = ballot1.compare(0, nodeId);
+        Assert.assertTrue(result.isGreater());
+        result = ballot1.compare(1, nodeId);
+        Assert.assertTrue(result.isEquals());
+        result = ballot1.compare(2, nodeId);
+        Assert.assertTrue(result.isSmaller());
     }
 
 }

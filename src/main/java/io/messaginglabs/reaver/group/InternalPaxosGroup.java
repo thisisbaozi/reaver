@@ -10,7 +10,6 @@ import io.messaginglabs.reaver.dsl.StateMachine;
 
 public interface InternalPaxosGroup extends PaxosGroup {
 
-    void start();
 
     void boot();
 

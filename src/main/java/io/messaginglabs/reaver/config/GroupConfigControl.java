@@ -141,14 +141,14 @@ public class GroupConfigControl implements ConfigControl {
          * want to join the group
          */
         Server server = group.env().connector.connect(node.getIp(), node.getPort());
-        boolean result = server.join(group.local());
+        //boolean result = server.join(group.id(), group.local());
 
         /*
          * if others rely on this server, they should connect with it by themselves
          */
         server.release();
 
-        return result;
+        return false;
     }
 
     @Override

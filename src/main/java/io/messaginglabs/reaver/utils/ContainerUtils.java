@@ -36,4 +36,12 @@ public final class ContainerUtils {
 
         return builder.toString();
     }
+
+    public static void checkNotEmpty(Collection<?> src, String msg) {
+        Objects.requireNonNull(src, msg);
+        if (msg.isEmpty()) {
+            throw new IllegalArgumentException(String.format("%s can't be empty", msg));
+        }
+    }
+
 }

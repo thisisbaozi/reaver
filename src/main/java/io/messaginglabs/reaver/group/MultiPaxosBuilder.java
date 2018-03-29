@@ -237,7 +237,7 @@ public class MultiPaxosBuilder implements PaxosBuilder {
             System.setProperty("io.netty.leakDetection.level", ResourceLeakDetector.Level.ADVANCED.name());
         }
         allocator = new PooledByteBufAllocator(useDirect);
-        connector = new DefaultServerConnector();
+        connector = new DefaultServerConnector(1, debug, transporter);
     }
 
 }

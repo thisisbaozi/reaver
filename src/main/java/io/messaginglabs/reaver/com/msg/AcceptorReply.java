@@ -1,6 +1,5 @@
 package io.messaginglabs.reaver.com.msg;
 
-import io.messaginglabs.reaver.core.Opcode;
 import io.netty.buffer.ByteBuf;
 
 public class AcceptorReply extends Message {
@@ -14,16 +13,6 @@ public class AcceptorReply extends Message {
 
     private long instanceId;
     private long acceptorId;
-
-    private Opcode op;
-
-    public Opcode getOp() {
-        return op;
-    }
-
-    public void setOp(Opcode op) {
-        this.op = op;
-    }
 
     public int getProposerId() {
         return proposerId;
@@ -73,8 +62,4 @@ public class AcceptorReply extends Message {
         this.acceptorId = acceptorId;
     }
 
-    @Override
-    public Opcode op() {
-        return op;
-    }
 }

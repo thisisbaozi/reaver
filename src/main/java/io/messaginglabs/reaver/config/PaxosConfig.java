@@ -63,6 +63,15 @@ public class PaxosConfig implements Config {
         return 0;
     }
 
+    @Override
+    public List<Node> members() {
+        return null;
+    }
+
+    @Override public ConfigView view() {
+        return null;
+    }
+
     @Override public long begin() {
         return 0;
     }

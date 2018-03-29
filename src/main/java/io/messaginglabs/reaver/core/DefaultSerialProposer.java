@@ -437,7 +437,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         }
 
         VotersCounter counter = ctx.counter();
-        if (reply.getOp() == Opcode.REJECT_PREPARE) {
+        if (reply.op() == Opcode.REJECT_PREPARE) {
             if (isDebug()) {
                 logger.trace(
                     "acceptor({}) rejected proposer({}/{})'s proposal(sequence={}, instance={}), due to an larger proposal({}/{})",
@@ -498,7 +498,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             }
         } else {
             throw new IllegalStateException(
-                "unknown op: " + reply.getOp().name()
+                "unknown op: " + reply.op().name()
             );
         }
 

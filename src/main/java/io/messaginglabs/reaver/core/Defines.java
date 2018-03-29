@@ -16,4 +16,6 @@ public final class Defines {
 
     public static final int MIN_VERSION_SUPPORTED = 1;
     public static final int MAX_VERSION_SUPPORTED = 1;
+
+    public static final int CACHE_MAX_CAPACITY = 32000;
 }

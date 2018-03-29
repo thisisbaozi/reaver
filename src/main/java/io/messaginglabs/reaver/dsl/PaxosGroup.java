@@ -70,7 +70,7 @@ public interface PaxosGroup {
     /**
      * Joins the group though the given seed nodes
      */
-    Future<ConfigView> join(List<Node> members);
+    void join(List<Node> members);
     Future<Boolean> leave();
 
     void add(ConfigEventsListener listener);

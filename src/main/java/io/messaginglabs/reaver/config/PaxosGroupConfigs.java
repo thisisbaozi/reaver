@@ -245,4 +245,8 @@ public class PaxosGroupConfigs implements GroupConfigs {
     @Override public Config newest() {
         return null;
     }
+
+    @Override public int size() {
+        return 0;
+    }
 }

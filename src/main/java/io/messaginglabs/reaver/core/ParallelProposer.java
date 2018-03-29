@@ -74,6 +74,10 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
         return enqueue(commit) ? CommitResult.OK : CommitResult.PROPOSE_THROTTLE;
     }
 
+    @Override public boolean close(long timeout) {
+        return false;
+    }
+
     @Override
     public Commit commit(ByteBuffer value) {
         GenericCommit commit = newCommit(value, null);

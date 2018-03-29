@@ -120,6 +120,7 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
         return instance;
     }
 
+    @Override public void close() throws Exception {
 
-
+    }
 }

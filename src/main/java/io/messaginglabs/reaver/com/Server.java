@@ -1,16 +1,11 @@
 package io.messaginglabs.reaver.com;
 
+import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.config.Node;
 import io.netty.util.ReferenceCounted;
 import java.util.function.Consumer;
 
-public interface Server extends ReferenceCounted {
-
-    enum State {
-        Inactive, Active,
-    }
-
-    boolean join(Node node);
+public interface Server extends ReferenceCounted, AutoCloseable {
 
     /*
      * -_-....
@@ -19,17 +14,8 @@ public interface Server extends ReferenceCounted {
      */
     void areYouOk();
 
+    void send(Message msg);
 
-    boolean isOk();
+    String address();
 
-    /**
-     * Adds a consumer to this server, this consumer is notified when this
-     * server's state is changed.
-     */
-    void observe(Consumer<Server.State> consumer);
-
-    /**
-     * Returns the last time when accessed this server
-     */
-    long time();
 }

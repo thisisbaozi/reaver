@@ -43,8 +43,4 @@ public class Prepare extends Message {
         this.value = value;
     }
 
-    @Override
-    public Opcode op() {
-        return Opcode.PREPARE;
-    }
 }
