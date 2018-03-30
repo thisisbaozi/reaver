@@ -148,7 +148,7 @@ public class MultiPaxosBuilder implements PaxosBuilder {
             init();
 
             InternalPaxosGroup group = new MultiPaxosGroup(id, stateMachine, initEnv(debug, path), options);
-            transporter.setConsumer(group::process);
+            // transporter.setConsumer(group::process);
 
             /*
              * releases resources if the group is closed
@@ -162,7 +162,7 @@ public class MultiPaxosBuilder implements PaxosBuilder {
         if (!externalTransporter) {
             try {
                 transporter.close();
-            } catch (IOException cause) {
+            } catch (Exception cause) {
                 logger.warn("can't close transporter", cause);
             }
         }
@@ -237,7 +237,7 @@ public class MultiPaxosBuilder implements PaxosBuilder {
             System.setProperty("io.netty.leakDetection.level", ResourceLeakDetector.Level.ADVANCED.name());
         }
         allocator = new PooledByteBufAllocator(useDirect);
-        connector = new DefaultServerConnector(1, debug, transporter);
+        connector = new DefaultServerConnector(-1, debug, transporter);
     }
 
 }

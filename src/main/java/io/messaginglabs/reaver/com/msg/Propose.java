@@ -77,4 +77,8 @@ public class Propose extends Message {
         return op;
     }
 
+    @Override protected int bodySize() {
+        return 0;
+    }
+
 }

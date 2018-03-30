@@ -20,7 +20,7 @@ public class Reconfigure extends Message {
 
     @Override
     protected void decodeBody(ByteBuf buf) {
-        int count = buf.readShort();
+        int count = buf.readInt();
         if (count == 0) {
             return ;
         }
@@ -55,4 +55,10 @@ public class Reconfigure extends Message {
             buf.writeLong(member.id());
         }
     }
+
+    @Override
+    protected int bodySize() {
+        return 4 + members.size() * 10;
+    }
+
 }

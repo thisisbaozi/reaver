@@ -61,10 +61,6 @@ public final class AddressUtils {
             }
         }
 
-        if (interfaces.isEmpty()) {
-            return null;
-        }
-
         for (InetAddress address : interfaces) {
             if (address.getHostAddress() == null) {
                 continue;

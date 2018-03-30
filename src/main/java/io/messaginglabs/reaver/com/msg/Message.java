@@ -79,7 +79,7 @@ public abstract class Message {
             throw new IllegalArgumentException("read-only buf");
         }
 
-        if (op() == null) {
+        if (op == null) {
             throw new IllegalStateException("unknown opcode msg");
         }
 
@@ -90,15 +90,13 @@ public abstract class Message {
         /*
          * message header:
          *
-         * +---------------+-----------------+-------------------+
-         * | type(2 bytes) | opcode(2 bytes) | group id(4 bytes) |
-         * +---------------+-----------------+-------------------+
-         *
-         * the magic is used to check whether a message is valid or not.
+         * +------------------+---------------+-----------------+
+         * | group id(4 bytes)| type(2 bytes) | opcode(2 bytes) |
+         * +------------------+---------------+-----------------+
          */
+        buf.writeInt(groupId);
         buf.writeShort(type().value);
         buf.writeShort(op.value);
-        buf.writeInt(groupId);
 
         encodeBody(buf);
         return buf;
@@ -113,6 +111,8 @@ public abstract class Message {
             );
         }
 
+        int groupId = buf.readInt();
+
         int rawType = buf.readShort();
         Type type = match(rawType);
         if (type == null) {
@@ -126,6 +126,8 @@ public abstract class Message {
         }
 
         this.op = op;
+        this.groupId = groupId;
+
         decodeBody(buf);
     }
 

@@ -18,4 +18,14 @@ public final class Defines {
     public static final int MAX_VERSION_SUPPORTED = 1;
 
     public static final int CACHE_MAX_CAPACITY = 32000;
+
+    /* transport */
+
+    /*
+     * the max size of a packet, it means the size of value must be smaller
+     * than this.
+     */
+    public static final int PACKET_MAX_SIZE = 32 * 1024 * 1024; // 32m
+
+    public static final int CONNECT_TIMEOUT = 2000;
 }

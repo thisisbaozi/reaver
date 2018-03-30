@@ -1,13 +1,11 @@
 package io.messaginglabs.reaver.com;
 
-import io.messaginglabs.reaver.utils.Parameters;
 import io.netty.util.AbstractReferenceCounted;
 import io.netty.util.ReferenceCounted;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,12 +16,12 @@ public class DefaultServerConnector extends AbstractReferenceCounted implements 
     private final int count;
     private final Map<String, List<Server>> servers;
     private final boolean debug;
-    private Transporter transporter;
+    private final Transporter transporter;
 
     public DefaultServerConnector(int count, boolean debug, Transporter transporter) {
-        this.count = Parameters.requireNotNegative(count, "count");
+        this.count = count;
         this.debug = debug;
-        this.transporter = Objects.requireNonNull(transporter, "transporter");
+        this.transporter = transporter;
         this.servers = new HashMap<>();
     }
 
@@ -35,6 +33,13 @@ public class DefaultServerConnector extends AbstractReferenceCounted implements 
                     logger.warn("no one will rely on connector, but the count（{}） of ref of server({}) is not 0", server.refCnt(), server.toString());
                 }
             }));
+        }
+    }
+
+    @Override
+    public List<Server> get(String ip, int port) {
+        synchronized (this) {
+            return this.servers.get(String.format("%s:%d", ip, port));
         }
     }
 
@@ -54,6 +59,8 @@ public class DefaultServerConnector extends AbstractReferenceCounted implements 
                         break;
                     }
                 }
+            } else if (count < 0 && !servers.isEmpty()) {
+                server = servers.get(0);
             }
 
             if (server == null) {
@@ -96,6 +103,10 @@ public class DefaultServerConnector extends AbstractReferenceCounted implements 
 
             if (logger.isInfoEnabled()) {
                 logger.info("nobody relies on server({}), close and remove it, remain {}", address, active.size());
+            }
+
+            if (active.isEmpty()) {
+                servers.remove(address);
             }
         }
     }

@@ -62,4 +62,7 @@ public class AcceptorReply extends Message {
         this.acceptorId = acceptorId;
     }
 
+    @Override protected int bodySize() {
+        return 0;
+    }
 }

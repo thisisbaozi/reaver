@@ -11,6 +11,7 @@ import io.netty.util.ReferenceCounted;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,7 +24,10 @@ public class RemoteServer extends AbstractReferenceCounted implements Server {
     private final boolean debug;
 
     private int deadline = 1500;
+    private int maxCapacity = 2048;
+    private int times = 0;
     private long beginConnect = -1;
+    private Function<Integer, Boolean> beforeConnect;
 
     private Channel ch;
     private ChannelFuture future;
@@ -41,16 +45,22 @@ public class RemoteServer extends AbstractReferenceCounted implements Server {
 
     private List<Entry> messages;
 
-    public RemoteServer(String ip, int port, boolean debug, Transporter transporter) {
+    public RemoteServer(String ip, int port, boolean debug, Transporter bootstrap) {
         this.ip = ip;
         this.port = port;
         this.debug = debug;
-        this.transporter = Objects.requireNonNull(transporter, "transporter");
-        this.future = this.transporter.connect(ip, port);
+        this.transporter = bootstrap;
+
+        connect();
     }
 
-    private void setDeadline(int deadline) {
+    public void set(int deadline, int maxCapacity) {
         this.deadline = deadline;
+        this.maxCapacity = maxCapacity;
+    }
+
+    public void set(Function<Integer, Boolean> beforeConnect) {
+        this.beforeConnect = beforeConnect;
     }
 
     @Override
@@ -65,6 +75,12 @@ public class RemoteServer extends AbstractReferenceCounted implements Server {
     @Override
     public String address() {
         return String.format("%s:%d", ip, port);
+    }
+
+    public int pendingSize() {
+        synchronized (this) {
+            return messages == null ? 0 : messages.size();
+        }
     }
 
     @Override
@@ -92,7 +108,7 @@ public class RemoteServer extends AbstractReferenceCounted implements Server {
         buf.writeInt(size);
 
         int idx = buf.writerIndex();
-        int currentIdx = msg.encode(buf).readerIndex();
+        int currentIdx = msg.encode(buf).writerIndex();
         if (currentIdx - idx != size) {
             throw new IllegalStateException(
                 String.format("msg size(%d), serialized size(%d), msg(%s)", size, currentIdx - idx, msg.toString())
@@ -102,13 +118,18 @@ public class RemoteServer extends AbstractReferenceCounted implements Server {
         return buf;
     }
 
-    private boolean isWritable() {
+    public ChannelFuture future() {
+        return future;
+    }
+
+    @Override
+    public boolean isActive() {
         return ch != null && ch.isActive();
     }
 
-    private void connect() {
+    public void connect() {
         synchronized (this) {
-            if (isWritable()) {
+            if (isActive()) {
                 return ;
             }
 
@@ -128,12 +149,32 @@ public class RemoteServer extends AbstractReferenceCounted implements Server {
             }
 
             ch = null;
+            times++;
+
+            // testing
+            if (beforeConnect != null && !beforeConnect.apply(times)) {
+                return ;
+            }
+
             beginConnect = System.currentTimeMillis();
             future = transporter.connect(ip, port).addListener((ChannelFutureListener)future -> {
-                this.ch = future.channel();
                 this.future = null;
+
                 if (future.isSuccess()) {
-                    emitPending();
+                    this.times = 0;
+                    this.ch = future.channel();
+                    if (future.isSuccess()) {
+                        int count = emitPending();
+                        if (count > 0 && logger.isDebugEnabled()) {
+                            logger.info("emit {} pending message after connection({}) is connected", count, ch.toString());
+                        }
+                    }
+
+                    return ;
+                }
+
+                if (logger.isWarnEnabled()) {
+                    logger.warn("can't connect with address({}:{})", ip, port, future.cause());
                 }
             });
         }
@@ -146,17 +187,20 @@ public class RemoteServer extends AbstractReferenceCounted implements Server {
             }
 
             messages.add(new Entry(data));
-
-            int size = messages.size();
-            if (size == 1) {
+            if (messages.size() == 1) {
                 return ;
             }
 
             long current = System.currentTimeMillis();
-            for (;;) {
+            while (messages.size() > 1) {
                 Entry entry = messages.get(0);
                 if (current - entry.begin >= deadline) {
-                    messages.remove(0);
+                    remove(messages);
+                    continue;
+                }
+
+                if (messages.size() > maxCapacity) {
+                    remove(messages);
                 } else {
                     break;
                 }
@@ -164,19 +208,37 @@ public class RemoteServer extends AbstractReferenceCounted implements Server {
         }
     }
 
-    private void emitPending() {
+    private static void remove(List<Entry> messages) {
+        Entry entry = messages.remove(0);
+        if (entry != null) {
+            if (entry.data.refCnt() != 1) {
+                throw new IllegalStateException(
+                    String.format("ref count is not 1 but %d", entry.data.refCnt())
+                );
+            }
+
+            entry.data.release();
+        }
+    }
+
+    private int emitPending() {
         if (ch == null) {
             throw new IllegalStateException("buggy, channel of server is still null");
         }
 
         synchronized (this) {
-            if (messages.isEmpty()) {
-                return ;
+            if (messages == null || messages.isEmpty()) {
+                return 0;
             }
 
             for (Entry entry : messages) {
                 doWrite(ch, entry.data);
             }
+
+            int size = messages.size();
+            messages.clear();
+
+            return size;
         }
     }
 
@@ -184,7 +246,7 @@ public class RemoteServer extends AbstractReferenceCounted implements Server {
     public void send(Message msg) {
         ByteBuf buf = serialize(msg);
 
-        if (!isWritable()) {
+        if (!isActive()) {
             cache(buf);
             connect();
             return ;
@@ -195,14 +257,14 @@ public class RemoteServer extends AbstractReferenceCounted implements Server {
 
     private void doWrite(Channel ch, ByteBuf buf) {
         if (debug) {
-            ch.write(buf).addListener((ChannelFutureListener)future -> {
+            ch.writeAndFlush(buf).addListener((ChannelFutureListener)future -> {
                 boolean result = future.isSuccess();
                 if (result && logger.isWarnEnabled()) {
                     logger.warn("can't send message to server({}:{})", ip, port, future.cause());
                 }
             });
         } else {
-            ch.write(buf, ch.voidPromise());
+            ch.writeAndFlush(buf, ch.voidPromise());
         }
     }
 

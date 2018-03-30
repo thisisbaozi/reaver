@@ -43,4 +43,7 @@ public class Prepare extends Message {
         this.value = value;
     }
 
+    @Override protected int bodySize() {
+        return 0;
+    }
 }

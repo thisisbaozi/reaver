@@ -18,4 +18,8 @@ public interface Server extends ReferenceCounted, AutoCloseable {
 
     String address();
 
+    void connect();
+
+    boolean isActive();
+
 }
