@@ -131,7 +131,7 @@ public class MultiPaxosBuilder implements PaxosBuilder {
 
     @Override
     public void setNode(Node node) {
-        this.node = Objects.requireNonNull(node, "node");
+        this.node = Objects.requireNonNull(node, "current");
     }
 
     @Override

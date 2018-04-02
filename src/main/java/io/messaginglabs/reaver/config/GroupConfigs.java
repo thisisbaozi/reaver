@@ -1,19 +1,19 @@
 package io.messaginglabs.reaver.config;
 
-import io.messaginglabs.reaver.com.Server;
 import java.util.List;
 
 public interface GroupConfigs {
 
-    void initConfig(List<Node> members);
+    int add(PaxosConfig cfg);
+    PaxosConfig build(long instanceId, long begin, List<Member> members);
 
-    List<Config> clear(long instanceId);
+    List<PaxosConfig> clear(long instanceId);
 
-    Config match(long instanceId);
+    PaxosConfig match(long instanceId);
 
-    List<Server> serversConnected();
+    void disconnectServers();
 
-    Config newest();
+    PaxosConfig newest();
 
     int size();
 }

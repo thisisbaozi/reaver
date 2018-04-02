@@ -11,8 +11,10 @@ public interface Commit extends Future<CommitResult> {
         PROPOSED,
         CHOSEN,
         LEARNED,
-        APPLIED,
+        FINISHED,
     }
+
+    Stage stage();
 
     /**
      * Returns the Paxos instance containing this commit, a Paxos instance
@@ -26,7 +28,7 @@ public interface Commit extends Future<CommitResult> {
      * commit is done. if this commit is already completed, it's notified
      * immediately.
      */
-    void addListener(Consumer<CommitResult> consumer);
+    void addListener(Consumer<Commit> consumer);
 
     /**
      * Adds a listener to this commit, this listener is notified when the commit

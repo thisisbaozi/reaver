@@ -1,5 +1,6 @@
 package io.messaginglabs.reaver.utils;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Objects;
 
@@ -7,6 +8,10 @@ public final class ContainerUtils {
 
     private ContainerUtils() {
 
+    }
+
+    public static <T> String toString(T[] elements, String name) {
+        return toString(Arrays.asList(elements), name);
     }
 
     public static <T> String toString(Collection<T> elements, String name) {

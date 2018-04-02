@@ -75,7 +75,7 @@ public class SimpleConfigStorage implements MetadataStorage {
     }
 
     @Override
-    public void write(int groupId, List<Config> configs) throws Exception {
+    public void write(int groupId, List<PaxosConfig> configs) throws Exception {
         Objects.requireNonNull(configs, "configs");
 
         String tmp = toTmpPath(groupId);
@@ -102,16 +102,16 @@ public class SimpleConfigStorage implements MetadataStorage {
         }
     }
 
-    @Override public List<Config> fetch(int groupId) {
+    @Override public List<PaxosConfig> fetch(int groupId) {
         return null;
     }
 
-    private void write(String path, List<Config> configs) throws IOException {
+    private void write(String path, List<PaxosConfig> configs) throws IOException {
         BufferedWriter bWriter = null;
         FileWriter writer = new FileWriter(path);
         try {
             bWriter = new BufferedWriter(writer);
-            for (Config cfg : configs) {
+            for (PaxosConfig cfg : configs) {
                 String str = serialize(cfg);
                 bWriter.write(str);
                 bWriter.newLine();
@@ -127,7 +127,7 @@ public class SimpleConfigStorage implements MetadataStorage {
         }
     }
 
-    private String serialize(Config config) {
+    private String serialize(PaxosConfig config) {
         return null;
     }
 

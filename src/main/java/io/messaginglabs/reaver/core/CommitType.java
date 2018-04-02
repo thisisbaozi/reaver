@@ -1,8 +1,6 @@
 package io.messaginglabs.reaver.core;
 
 public enum CommitType {
-
-    VALUE,
+    APP_VALUE,
     CONFIG,
-
 }

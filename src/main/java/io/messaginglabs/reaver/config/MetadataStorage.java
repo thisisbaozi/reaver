@@ -7,7 +7,7 @@ public interface MetadataStorage extends Closeable {
 
     void init() throws Exception;
     void delete(int groupId);
-    void write(int groupId, List<Config> configs) throws Exception;
+    void write(int groupId, List<PaxosConfig> configs) throws Exception;
 
-    List<Config> fetch(int groupId);
+    List<PaxosConfig> fetch(int groupId);
 }

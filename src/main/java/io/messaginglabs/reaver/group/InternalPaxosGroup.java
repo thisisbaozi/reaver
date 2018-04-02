@@ -35,8 +35,6 @@ public interface InternalPaxosGroup extends PaxosGroup {
 
     InstanceCache cache();
 
-    Server server();
-
     void addCloseListener(Runnable runner);
     StateMachine getStateMachine();
 

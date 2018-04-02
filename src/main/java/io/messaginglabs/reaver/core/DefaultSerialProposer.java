@@ -1,8 +1,9 @@
 package io.messaginglabs.reaver.core;
 
+import io.messaginglabs.reaver.com.msg.LearnValue;
 import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.com.msg.AcceptorReply;
-import io.messaginglabs.reaver.config.Config;
+import io.messaginglabs.reaver.config.PaxosConfig;
 import io.messaginglabs.reaver.config.GroupConfigs;
 import io.messaginglabs.reaver.dsl.CommitResult;
 import io.messaginglabs.reaver.dsl.PaxosGroup;
@@ -169,7 +170,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
                     id,
                     group.id(),
                     "",
-                    ctx.config().acceptors(),
+                    ctx.config().members().length,
                     ctx.counter().dumpPromised()
                 );
             }
@@ -184,7 +185,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         }
     }
 
-    public Config find(long instanceId) {
+    public PaxosConfig find(long instanceId) {
         inLoop();
 
         if (instanceId < 0) {
@@ -226,7 +227,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
         // match a config based on acquired instance id, if no config
         // is available, fail commits
-        Config config = find(instanceId);
+        PaxosConfig config = find(instanceId);
         if (config == null) {
             if (isDebug()) {
                 logger.info("no config is usable for instance({}), fail commits", instanceId);
@@ -298,7 +299,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         }
 
         if (chosen.getNodeId() == ctx.nodeId()) {
-            // it's enough, group id + node id must be unique
+            // it's enough, group id + current id must be unique
             ctx.clear();
 
             if (isDebug()) {
@@ -332,7 +333,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             throw new IllegalStateException("buggy, can't create proposal");
         }
 
-        Config config = ctx.config();
+        PaxosConfig config = ctx.config();
         AlgorithmPhase phase = getPhase();
         long instanceId = ctx.instanceId();
 
@@ -349,10 +350,10 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         }
 
         if (getPhase() == AlgorithmPhase.TWO_PHASE) {
-            config.propose(instanceId, proposal);
+            // config.propose(instanceId, proposal);
             ctx.setStage(PaxosPhase.ACCEPT);
         } else {
-            config.prepare(instanceId, proposal);
+            // config.prepare(instanceId, proposal);
             ctx.setStage(PaxosPhase.PREPARE);
         }
     }
@@ -366,9 +367,9 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             );
         }
 
-        if (ctx.config().node() == null) {
+        if (group.local() == null) {
             throw new IllegalStateException(
-                String.format("buggy, node is null in config(%s)", ctx.config().toString())
+                String.format("buggy, current is null in config(%s)", ctx.config().toString())
             );
         }
 
@@ -513,8 +514,9 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
          * 1. rejected
          * 2. pending(do nothing)
          */
-        Config config = ctx.config();
-        int majority = ctx.config().majority();
+        PaxosConfig config = ctx.config();
+        // int majority = ctx.config().majority();
+        int majority = 0;
         if (counter.nodesPromised() >= majority) {
             if (isDebug()) {
                 logger.trace(
@@ -530,7 +532,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             // It's no necessary to process replies for first phase when we get here
             // clear votes.
             counter.reset();
-            config.propose(ctx.instanceId(), ctx.proposal());
+            // config.propose(ctx.instanceId(), ctx.proposal());
         } else if (counter.nodesRejected() >= majority) {
             if (isDebug()) {
                 logger.trace(
@@ -581,6 +583,8 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             return ;
         }
 
+        // The current made this reply is the member of the config
+
         VotersCounter counter = ctx.counter();
         if (reply.isAcceptRejected()) {
             if (isDebug()) {
@@ -603,22 +607,26 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     }
 
     private void checkAcceptPhase(VotersCounter counter) {
-        int majority = ctx.config().majority();
+        // int majority = ctx.config().majority();
+        int majority = 0;
         if (counter.nodesPromised() >= majority) {
-            if (isDebug()) {
-
-            }
-
             /*
              * now, the value in the instance this proposer is proposing
              * is chosen, commit it.
              */
-            onInstanceDone();
+            chooseValue();
         } else if (counter.nodesRejected() >= majority) {
-            if (isDebug()) {
 
-            }
         }
+    }
+
+    private void chooseValue() {
+        LearnValue msg = new LearnValue();
+        msg.setInstanceId(ctx.instanceId());
+        msg.setNodeId(ctx.proposal().getNodeId());
+        msg.setSequence(ctx.proposal().getSequence());
+
+        ctx.config().broadcast(msg);
     }
 
     @Override

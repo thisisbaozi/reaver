@@ -1,6 +1,6 @@
 package io.messaginglabs.reaver.core;
 
-import io.messaginglabs.reaver.config.Config;
+import io.messaginglabs.reaver.config.PaxosConfig;
 import io.netty.buffer.ByteBuf;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,7 +26,7 @@ public class ProposeContext {
     private long instanceId;
 
     // the instance propose this proposal based on the config
-    private Config config;
+    private PaxosConfig config;
     private AlgorithmPhase phase;
     private List<GenericCommit> commits = new ArrayList<>();
     private ByteBuf value;
@@ -36,7 +36,7 @@ public class ProposeContext {
     private final Ballot maxPromised = new Ballot();
     private final VotersCounter counter = new VotersCounter();
 
-    public void reset(long instanceId, Config config, long nodeId) {
+    public void reset(long instanceId, PaxosConfig config, long nodeId) {
         if (commits.isEmpty()) {
             throw new IllegalArgumentException(
                 String.format("nothing needs to reach a consensus for instance(%d)", instanceId)
@@ -94,7 +94,7 @@ public class ProposeContext {
         return phase;
     }
 
-    public Config config() {
+    public PaxosConfig config() {
         return config;
     }
 

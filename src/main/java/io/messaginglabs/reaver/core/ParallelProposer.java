@@ -212,7 +212,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
                 continue;
             }
 
-            if (!commit.markNotCancellable()) {
+            if (!commit.setStage(Commit.Stage.PROPOSED)) {
                 if (!commit.isCancelled()) {
                     throw new IllegalStateException(String.format("commit(%s) is not cancelled", commit.toString()));
                 }
@@ -220,7 +220,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
                 continue;
             }
 
-            if (!inBatch(commit) || commit.getValueSize() + bytes >= maxBatchSize) {
+            if (!inBatch(commit) || commit.valueSize() + bytes >= maxBatchSize) {
                 if (batch.isEmpty()) {
                     batch.add(commit);
                 } else {
@@ -238,7 +238,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
              * now, cancelling is not supported
              */
             batch.add(commit);
-            bytes += commit.getValueSize();
+            bytes += commit.valueSize();
 
             /*
              * todo: statistics and trace
@@ -254,7 +254,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
         /*
          * There's only ValueCtx op can be proposed in batch.
          */
-        return commit.type() == CommitType.VALUE;
+        return commit.type() == CommitType.APP_VALUE;
     }
 
     private boolean isIgnore(GenericCommit commit) {
@@ -301,7 +301,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
             throw new IllegalArgumentException("empty value is not allowed");
         }
 
-        return new GenericCommit(null, copyValue(value), attachment);
+        return new GenericCommit(copyValue(value), attachment, CommitType.APP_VALUE);
     }
 
     @Override

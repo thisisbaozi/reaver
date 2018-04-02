@@ -65,12 +65,12 @@ public class PaxosInstance extends AbstractReferenceCounted {
         return promised;
     }
 
-    public ByteBuf chosenValue() {
-        return null;
-    }
-
     public Proposal chosen() {
         return chosen;
+    }
+
+    public ByteBuf chosenValue(){
+        return chosen.getValue();
     }
 
     public Proposal proposer() {
@@ -84,5 +84,13 @@ public class PaxosInstance extends AbstractReferenceCounted {
 
         holder = proposerId;
         return -1;
+    }
+
+    public boolean isChosen() {
+        return false;
+    }
+
+    public boolean isConfig() {
+        return false;
     }
 }

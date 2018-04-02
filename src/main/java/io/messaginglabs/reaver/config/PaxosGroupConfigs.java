@@ -1,5 +1,6 @@
 package io.messaginglabs.reaver.config;
 
+import io.messaginglabs.reaver.com.LocalServer;
 import io.messaginglabs.reaver.com.Server;
 import io.messaginglabs.reaver.core.Value;
 import io.messaginglabs.reaver.group.InternalPaxosGroup;
@@ -8,27 +9,29 @@ import io.netty.buffer.ByteBuf;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class PaxosGroupConfigs implements GroupConfigs {
 
+    private static final Logger logger = LoggerFactory.getLogger(PaxosGroupConfigs.class);
+
     /*
      * Reserves last n versions config
      */
     private static final int RESERVE_NUM = 2;
 
-    private static final Logger logger = LoggerFactory.getLogger(PaxosGroupConfigs.class);
-
     private final InternalPaxosGroup group;
-    private MetadataStorage storage;
+    private final MetadataStorage storage;
+    private final LocalServer localServer;
 
     /*
      * configs are still usable, the element at 0 is oldest config, size - 1
      * is the newest config.
      */
-    private List<Config> configs = new ArrayList<>();
+    private List<PaxosConfig> configs = new ArrayList<>();
 
     public PaxosGroupConfigs(InternalPaxosGroup group) {
         this(group, null);
@@ -39,6 +42,7 @@ public class PaxosGroupConfigs implements GroupConfigs {
 
         // do nothing when configs is changed if storage is null
         this.storage = storage;
+        this.localServer = new LocalServer(group);
         initConfigs();
     }
 
@@ -66,53 +70,40 @@ public class PaxosGroupConfigs implements GroupConfigs {
         }
     }
 
-    private void check(Value value) {
-        Objects.requireNonNull(value, "value");
+    @Override
+    public int add(PaxosConfig config) {
+        Objects.requireNonNull(config, "config");
 
-        if (!value.isChosen()) {
-            /*
-             * can't apply a not chosen value
-             */
-            throw new IllegalArgumentException(
-                String.format("value(%s) is not chosen", value.toString())
-            );
-        }
+        logger.info(
+            "add new config to group({}), new config({}), active configs({})",
+            group.id(),
+            config.toString(),
+            configs.size()
+        );
 
-        ByteBuf data = value.getData();
-        if (data == null || data.readableBytes() == 0) {
-            throw new IllegalArgumentException(
-                String.format("void data in value(%s)", value.toString())
-            );
-        }
+        configs.add(config);
+        sync();
+
+        return configs.size();
     }
 
     @Override
-    public void initConfig(List<Node> members) {
-        if (configs.isEmpty()) {
-            configs.add(build(0,1, members));
-            sync();
-            return ;
-        }
-
-        logger.info("ignore config members, group({}) has a number of configs({})", group.id(), ContainerUtils.toString(configs, "configs"));
-    }
-
-    private PaxosConfig build(long reconfigureId, long beginId, List<Node> members) {
+    public ImmutablePaxosConfig build(long instanceId, long beginId, List<Member> members) {
         Objects.requireNonNull(members, "members");
 
         if (members.isEmpty()) {
             throw new IllegalArgumentException("can't build a empty config(no members)");
         }
 
-        if (reconfigureId > beginId) {
+        if (instanceId > beginId) {
             throw new IllegalArgumentException(
-                String.format("reconfigure id(%d) should be smaller than begin id(%d)", reconfigureId, beginId)
+                String.format("reconfigure id(%d) should be smaller than begin id(%d)", instanceId, beginId)
             );
         }
 
         // filter duplicated nods
-        List<Node> copy = new ArrayList<>();
-        for (Node member : members) {
+        List<Member> copy = new ArrayList<>();
+        for (Member member : members) {
             if (!copy.contains(member)) {
                 copy.add(member);
             }
@@ -124,23 +115,23 @@ public class PaxosGroupConfigs implements GroupConfigs {
         for (Node member : copy) {
             Server server;
             if (member.equals(group.local())) {
-                server = group.server();
+                server = localServer;
             } else {
                 server = group.env().connector.connect(member.getIp(), member.getPort());
             }
 
             if (server == null) {
-                throw new IllegalStateException("can't connect with node: " + member.toString());
+                throw new IllegalStateException("can't connect with current: " + member.toString());
             }
 
             servers[idx] = server;
             idx++;
         }
 
-        return new PaxosConfig(group.id(), reconfigureId, beginId, copy, servers);
+        return new ImmutablePaxosConfig(group.id(), instanceId, beginId, (Member[])copy.toArray(), servers);
     }
 
-    private boolean isUsable(long instanceId, Config config) {
+    private boolean isUsable(long instanceId, PaxosConfig config) {
         Objects.requireNonNull(config, "config");
 
         if (instanceId <= 0) {
@@ -156,7 +147,7 @@ public class PaxosGroupConfigs implements GroupConfigs {
     }
 
     @Override
-    public List<Config> clear(long instanceId) {
+    public List<PaxosConfig> clear(long instanceId) {
         int size = configs.size();
         int reserve = RESERVE_NUM;
 
@@ -176,7 +167,7 @@ public class PaxosGroupConfigs implements GroupConfigs {
             }
         }
 
-        List<Config> useless = null;
+        List<PaxosConfig> useless = null;
         for (int j = 0; j < i; j++) {
             if (useless == null) {
                 useless = new ArrayList<>();
@@ -222,10 +213,10 @@ public class PaxosGroupConfigs implements GroupConfigs {
     }
 
     @Override
-    public Config match(long instanceId) {
+    public PaxosConfig match(long instanceId) {
         int size = configs.size();
         for (int i = size - 1; i >= 0; i--) {
-            Config config = configs.get(i);
+            PaxosConfig config = configs.get(i);
             if (config == null) {
                 throw new NullPointerException("null config in configs");
             }
@@ -238,15 +229,22 @@ public class PaxosGroupConfigs implements GroupConfigs {
         return null;
     }
 
-    @Override public List<Server> serversConnected() {
-        return null;
+    @Override
+    public void disconnectServers() {
+        for (PaxosConfig config : configs) {
+            for (Server server : config.servers()) {
+                server.release();
+            }
+        }
     }
 
-    @Override public Config newest() {
-        return null;
+    @Override
+    public PaxosConfig newest() {
+        return configs.isEmpty() ? null : configs.get(0);
     }
 
-    @Override public int size() {
-        return 0;
+    @Override
+    public int size() {
+        return configs.size();
     }
 }

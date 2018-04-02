@@ -28,7 +28,7 @@ public class V0ValueCodec implements ValueCodec {
          */
         int space = 4 * (size + 1);
         for (int i = 0; i < size; i++) {
-            space += commits.get(i).getValueSize();
+            space += commits.get(i).valueSize();
         }
 
         /*

@@ -14,6 +14,7 @@ public final class Defines {
      */
     public static final int MAX_ACCEPTORS = 24;
 
+    public static final int VOID_VERSION = 0;
     public static final int MIN_VERSION_SUPPORTED = 1;
     public static final int MAX_VERSION_SUPPORTED = 1;
 

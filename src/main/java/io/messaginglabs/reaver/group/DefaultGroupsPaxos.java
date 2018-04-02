@@ -51,9 +51,9 @@ public final class DefaultGroupsPaxos implements GroupsPaxos {
         Parameters.requireNotNegativeOrZero(options.valuesCache, "valuesCache");
 
         // com
-        Objects.requireNonNull(options.node, "node");
-        Parameters.requireNotNegativeOrZero(options.node.getPort(), "node.port");
-        Parameters.requireNotEmpty(options.node.getIp(), "node.ip");
+        Objects.requireNonNull(options.node, "current");
+        Parameters.requireNotNegativeOrZero(options.node.getPort(), "current.port");
+        Parameters.requireNotEmpty(options.node.getIp(), "current.ip");
 
         // storage
         if (options.storage == null) {

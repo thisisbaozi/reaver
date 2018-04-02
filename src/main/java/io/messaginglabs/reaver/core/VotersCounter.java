@@ -1,5 +1,7 @@
 package io.messaginglabs.reaver.core;
 
+import io.messaginglabs.reaver.config.PaxosConfig;
+import io.messaginglabs.reaver.dsl.ConfigControl;
 import io.messaginglabs.reaver.utils.AddressUtils;
 
 public class VotersCounter {
@@ -133,6 +135,10 @@ public class VotersCounter {
         nodes = 0;
         nodesPromised = 0;
         nodesRejected = 0;
+    }
+
+    public boolean acceptInMajority(PaxosConfig cfg) {
+        return true;
     }
 
     @Override

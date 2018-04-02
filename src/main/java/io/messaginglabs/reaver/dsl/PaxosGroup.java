@@ -25,13 +25,13 @@ public interface PaxosGroup {
         UNKNOWN,
 
         /*
-         * it's able to propose value through this node and this node is
+         * it's able to propose value through this current and this current is
          * also vote for values.
          */
         FORMAL,
 
         /*
-         * this node only learn chosen values from a provider.
+         * this current only learn chosen values from a provider.
          */
         FOLLOWER,
     }
@@ -63,7 +63,7 @@ public interface PaxosGroup {
      * Selects a donor from ths given member list and learn chosen values from it. The follower
      * try to match a new donor from last config view if the old donor is inactive.
      *
-     * Calling {@link #join(List)} if this node wants to be an acceptor(proposer).
+     * Calling {@link #join(List)} if this current wants to be an acceptor(proposer).
      */
     FollowContext follow(List<Node> nodes);
 
@@ -72,6 +72,7 @@ public interface PaxosGroup {
      */
     void join(List<Node> members);
     Future<Boolean> leave();
+    void recommend(Node newLeader);
 
     void add(ConfigEventsListener listener);
     void remove(ConfigEventsListener listener);

@@ -17,8 +17,8 @@ public enum Opcode {
     FORCE_CONFIG(10),
 
     // boot
-    UNIFIED_BOOT(11)
-
+    UNIFIED_BOOT(11),
+    LEARN_VALUE(12),
     ;
 
     public final int value;

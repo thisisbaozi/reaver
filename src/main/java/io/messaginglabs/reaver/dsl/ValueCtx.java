@@ -15,21 +15,11 @@ public interface ValueCtx {
      * You might want to batch a number of values and process them in bulk, deep
      * copy is a choice.
      */
-    ByteBuf get();
+    ByteBuf value();
 
     /**
      * Returns the attachment specified while commit the value, it could be null.
      */
     Object attachment();
-
-    /**
-     * Returns the time when committed this value.
-     */
-    long begin();
-
-    /**
-     * Returns the time when this value is chosen.
-     */
-    long chosen();
 
 }

@@ -7,7 +7,7 @@ import java.util.concurrent.Future;
 public interface FollowContext {
 
     /**
-     * Returns the node providing chosen values to this node
+     * Returns the current providing chosen values to this current
      */
     Node provider();
 

@@ -40,7 +40,7 @@ public class GroupConfigControl implements ConfigControl {
         Objects.requireNonNull(nodes);
 
         if (nodes.isEmpty()) {
-            throw new IllegalArgumentException("empty node set");
+            throw new IllegalArgumentException("empty current set");
         }
     }
 
@@ -67,7 +67,7 @@ public class GroupConfigControl implements ConfigControl {
         }
 
         if (id <= 0) {
-            // this follower is a new node, dump completed instances
+            // this follower is a new current, dump completed instances
             // from 1 to last one.
             id = 1;
         }
@@ -78,16 +78,16 @@ public class GroupConfigControl implements ConfigControl {
     @Override
     public Future<ConfigView> join(List<Node> members) {
         synchronized (this) {
-            Config config = configs.newest();
+            PaxosConfig config = configs.newest();
             if (config != null) {
-                logger.info("this node({}) has already joined the group({})", ContainerUtils.toString(config.members(), "members"), group.id());
+                logger.info("this current({}) has already joined the group({})", ContainerUtils.toString(config.members(), "members"), group.id());
 
                 if (future != null) {
                     return future;
                 }
 
                 future = new CompletableFuture<>();
-                future.complete(config.view());
+                // future.complete(config.view());
 
                 return future;
             }
@@ -101,7 +101,7 @@ public class GroupConfigControl implements ConfigControl {
 
         if (logger.isInfoEnabled()) {
             logger.info(
-                "this node({}) try to join the group({}) based on the given donors({})",
+                "this current({}) try to join the group({}) based on the given donors({})",
                 group.local().toString(),
                 group.id(),
                 ContainerUtils.toString(members, "members")
@@ -137,7 +137,7 @@ public class GroupConfigControl implements ConfigControl {
 
     private boolean join(Node node) {
         /*
-         * connect with the given node and send it a message that this node
+         * connect with the given current and send it a message that this current
          * want to join the group
          */
         Server server = group.env().connector.connect(node.getIp(), node.getPort());
