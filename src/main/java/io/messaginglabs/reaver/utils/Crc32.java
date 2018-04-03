@@ -1,12 +1,17 @@
 package io.messaginglabs.reaver.utils;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.util.internal.PlatformDependent;
+import java.nio.ByteBuffer;
+import sun.nio.ch.DirectBuffer;
+
 public final class Crc32 {
 
     private Crc32() {
 
     }
 
-    private static final int[] table = {
+    private static final int[] crc32Table = {
         0x00000000, 0x04c11db7, 0x09823b6e, 0x0d4326d9,
         0x130476dc, 0x17c56b6b, 0x1a864db2, 0x1e475005,
         0x2608edb8, 0x22c9f00f, 0x2f8ad6d6, 0x2b4bcb61,
@@ -73,16 +78,79 @@ public final class Crc32 {
         0xbcb4666d, 0xb8757bda, 0xb5365d03, 0xb1f740b4
     };
 
-    public static int update(int current, int value) {
-        return current << 8 ^ table[(current >> 24 ^ value) & 0xff];
+    private static int get(long memoryAddress, int position, int size) {
+        int checksum = 0xffffffff;
+        for (int i = 0; i < size; i++) {
+            long address = memoryAddress + position + i;
+            byte v = PlatformDependent.getByte(address);
+            checksum = update(checksum, v);
+        }
+        return ~checksum;
     }
 
-    public static int get(byte[] src, int crc32, int offset, int len) {
-        return 0;
-    }
-    public static int get(byte[] src, int crc32) {
-        return 0;
+    public static int get(byte[] src, int offset, int len) {
+        int checksum = 0xffffffff;
+        for (int i = 0; i < len; i++) {
+            int idx = offset + i;
+            checksum = update(checksum, src[idx]);
+        }
+        return ~checksum;
     }
 
+    private static int update(int crc, int value) {
+        return crc << 8 ^ crc32Table[(crc >> 24 ^ value) & 0xff];
+    }
+
+    public static int get(ByteBuf src) {
+        int size = src.readableBytes();
+        int checksum = 0xffffffff;
+        if (size == 0) {
+            return ~checksum;
+        }
+
+        if (src.isDirect()) {
+            long memoryAddress = src.memoryAddress() + src.readerIndex();
+            for (int i = 0; i < size; i++) {
+                byte v = PlatformDependent.getByte(memoryAddress + i);
+                checksum = update(checksum, v);
+            }
+            return ~checksum;
+        } else if (src.hasArray()) {
+            byte[] bytes = src.array();
+            for (int i = 0; i < size; i++) {
+                int idx = src.arrayOffset() + i;
+                checksum = update(checksum, bytes[idx]);
+            }
+            return ~checksum;
+        } else {
+            // plain way
+            for (int i = 0; i < size; i++) {
+                checksum = update(checksum, src.getByte(src.readerIndex() + i));
+            }
+        }
+
+        return ~checksum;
+    }
+
+    public static int get(ByteBuffer src) {
+        if (src.remaining() == 0) {
+            return 0;
+        }
+
+        if (src instanceof DirectBuffer) {
+            return get(((DirectBuffer)src).address(), src.position(), src.limit());
+        } else if (src.hasArray()) {
+            return get(src.array(), src.arrayOffset()  + src.position(), src.limit());
+        }
+
+        // calculate in plain way
+        int limit = src.limit();
+        int checksum = 0xffffffff;
+        for (int i = 0; i < limit; i++) {
+            checksum = update(checksum, src.get(src.position() + i));
+        }
+
+        return ~checksum;
+    }
 
 }

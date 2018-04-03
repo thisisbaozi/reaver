@@ -2,61 +2,27 @@ package io.messaginglabs.reaver.core;
 
 import io.netty.buffer.ByteBuf;
 
-public class Value {
-
-    private int groupId;
+public interface Value {
 
     /*
-     * the instance id all nodes in the config have reached a consensus on
+     * the max size of the payload of a value
      */
-    private long instanceId;
+    int SIZE_BITS = 27;
+    int MAX_SIZE = (1 << SIZE_BITS) - 1;   // 127m
 
     /*
-     * indicates whether this value is chosen or not.
+     * the header of a value is composed of:
+     *
+     * 0. size of data(25 bits, max)
+     * 1. type(7 bits, 127 is enough)
+     * 2. checksum(bytes)
      */
-    private boolean chosen;
-    private ByteBuf data;
+    int HEADER_SIZE = 8;
 
-    public int getGroupId() {
-        return groupId;
-    }
+    int size();
+    int checksum();
+    ValueType type();
 
-    public void setGroupId(int groupId) {
-        this.groupId = groupId;
-    }
-
-    public long getInstanceId() {
-        return instanceId;
-    }
-
-    public void setInstanceId(long instanceId) {
-        this.instanceId = instanceId;
-    }
-
-    public boolean isChosen() {
-        return chosen;
-    }
-
-    public void setChosen(boolean chosen) {
-        this.chosen = chosen;
-    }
-
-    public ByteBuf getData() {
-        return data;
-    }
-
-    public void setData(ByteBuf data) {
-        this.data = data;
-    }
-
-    @Override
-    public String toString() {
-        return "Value{" +
-            "groupId=" + groupId +
-            ", instanceId=" + instanceId +
-            ", chosen=" + chosen +
-            ", data=" + data +
-            '}';
-    }
+    ByteBuf payload();
 
 }

@@ -2,7 +2,6 @@ package io.messaginglabs.reaver.config;
 
 import io.messaginglabs.reaver.com.LocalServer;
 import io.messaginglabs.reaver.com.Server;
-import io.messaginglabs.reaver.core.Value;
 import io.messaginglabs.reaver.group.InternalPaxosGroup;
 import io.messaginglabs.reaver.utils.ContainerUtils;
 import io.netty.buffer.ByteBuf;
@@ -29,7 +28,7 @@ public class PaxosGroupConfigs implements GroupConfigs {
 
     /*
      * configs are still usable, the element at 0 is oldest config, size - 1
-     * is the newest config.
+     * is the current config.
      */
     private List<PaxosConfig> configs = new ArrayList<>();
 
@@ -239,7 +238,7 @@ public class PaxosGroupConfigs implements GroupConfigs {
     }
 
     @Override
-    public PaxosConfig newest() {
+    public PaxosConfig current() {
         return configs.isEmpty() ? null : configs.get(0);
     }
 

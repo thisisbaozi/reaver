@@ -259,8 +259,6 @@ public class GenericCommit extends ArrayList<GenericCommit.Pair> implements Comm
     @Override
     public String toString() {
         return "GenericCommit{" +
-            "value=" + value +
-            ", attachment=" + attachment +
             ", type=" + type +
             ", waiters=" + waiters +
             ", begin=" + begin +

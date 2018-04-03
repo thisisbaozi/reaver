@@ -29,4 +29,5 @@ public final class Defines {
     public static final int PACKET_MAX_SIZE = 32 * 1024 * 1024; // 32m
 
     public static final int CONNECT_TIMEOUT = 2000;
+
 }

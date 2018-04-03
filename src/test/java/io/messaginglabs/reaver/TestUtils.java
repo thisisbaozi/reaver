@@ -4,8 +4,13 @@ import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.core.Ballot;
 import io.messaginglabs.reaver.core.VotersCounter;
 import io.messaginglabs.reaver.utils.AddressUtils;
+import io.messaginglabs.reaver.utils.Crc32;
+import io.messaginglabs.reaver.utils.Strings;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.util.collection.IntObjectHashMap;
 import io.netty.util.collection.IntObjectMap;
+import java.nio.ByteBuffer;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -87,4 +92,27 @@ public class TestUtils {
         Assert.assertTrue(result.isSmaller());
     }
 
+    @Test
+    public void testChecksum() throws Exception {
+        String str = "Native method support for java.util.zip.CRC32";
+        byte[] bytes = Strings.UTF8Bytes(str);
+
+        ByteBuffer buf0 = MockUtils.makeValue();
+        int checksum = Crc32.get(buf0);
+        ByteBuffer buf1 = ByteBuffer.allocateDirect(bytes.length);
+        buf1.put(bytes);
+        buf1.flip();
+        int checksum1 = Crc32.get(buf1);
+        Assert.assertEquals(checksum, checksum1);
+
+        ByteBuf buf2 = ByteBufAllocator.DEFAULT.buffer(bytes.length);
+        buf2.writeBytes(bytes);
+        int checksum2 = Crc32.get(buf2);
+        Assert.assertEquals(checksum, checksum2);
+
+        ByteBuf buf3 = ByteBufAllocator.DEFAULT.directBuffer(bytes.length);
+        buf3.writeBytes(bytes);
+        int checksum3 = Crc32.get(buf3);
+        Assert.assertEquals(checksum, checksum3);
+    }
 }

@@ -1,13 +1,13 @@
 package io.messaginglabs.reaver.debug;
 
-import io.messaginglabs.reaver.utils.Parameters;
-
 public class FailPoint {
 
-    public final String id;
+    private final String id;
+    private final int probability;
 
-    public FailPoint(String id) {
-        this.id = Parameters.requireNotEmpty(id,"id");
+    public FailPoint(String id, int probability) {
+        this.id = id;
+        this.probability = probability;
     }
 
     public String id() {
@@ -18,4 +18,5 @@ public class FailPoint {
     public String toString() {
         return id;
     }
+
 }

@@ -31,6 +31,14 @@ public enum Opcode {
         return this == JOIN_GROUP;
     }
 
+    public boolean isPrepare() {
+        return this == PREPARE;
+    }
+
+    public boolean isPropose() {
+        return this == PROPOSE;
+    }
+
     public static Opcode match(int value) {
         for (Opcode opcode : Opcode.values()) {
             if (opcode.value == value) {

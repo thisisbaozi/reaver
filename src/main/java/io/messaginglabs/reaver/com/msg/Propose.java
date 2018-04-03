@@ -1,28 +1,18 @@
 package io.messaginglabs.reaver.com.msg;
 
-import io.messaginglabs.reaver.core.Opcode;
 import io.netty.buffer.ByteBuf;
 
 public class Propose extends Message {
 
     private int proposerId;
-
-    /*
-     * ProposeContext number
-     */
     private int sequence;
     private long nodeId;
-
-    /*
-     * paxos instance id
-     */
     private long instanceId;
 
     /*
      * combined value
      */
     private ByteBuf value;
-    private Opcode op;
 
     public int getProposerId() {
         return proposerId;
@@ -64,21 +54,18 @@ public class Propose extends Message {
         this.value = value;
     }
 
-    public Opcode getOp() {
-        return op;
-    }
-
-    public void setOp(Opcode op) {
-        this.op = op;
-    }
-
     @Override
-    public Opcode op() {
-        return op;
-    }
-
-    @Override protected int bodySize() {
+    protected int bodySize() {
         return 0;
     }
 
+    @Override
+    protected void decodeBody(ByteBuf buf) {
+        super.decodeBody(buf);
+    }
+
+    @Override
+    protected void encodeBody(ByteBuf buf) {
+        super.encodeBody(buf);
+    }
 }

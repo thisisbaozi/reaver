@@ -13,7 +13,7 @@ public interface GroupConfigs {
 
     void disconnectServers();
 
-    PaxosConfig newest();
+    PaxosConfig current();
 
     int size();
 }

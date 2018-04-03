@@ -2,8 +2,10 @@ package io.messaginglabs.reaver.core;
 
 public enum ValueType {
 
-    APP_DATA(0),
-    MEMBER_JOIN(1),
+    UNKNOWN(0),
+    APP_DATA(1),
+    MEMBER_JOIN(2),
+    REMOVE_MEMBER(3),
     ;
 
     public final int idx;

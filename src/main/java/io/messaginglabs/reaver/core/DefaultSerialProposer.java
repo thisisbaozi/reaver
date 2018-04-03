@@ -1,8 +1,12 @@
 package io.messaginglabs.reaver.core;
 
+import io.messaginglabs.reaver.com.Server;
 import io.messaginglabs.reaver.com.msg.LearnValue;
 import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.com.msg.AcceptorReply;
+import io.messaginglabs.reaver.com.msg.Prepare;
+import io.messaginglabs.reaver.com.msg.Propose;
+import io.messaginglabs.reaver.config.Member;
 import io.messaginglabs.reaver.config.PaxosConfig;
 import io.messaginglabs.reaver.config.GroupConfigs;
 import io.messaginglabs.reaver.dsl.CommitResult;
@@ -98,7 +102,6 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         }
 
         ctx.setCommits(commits);
-
         if (isDebug()) {
             logger.trace("set a new commit({}) to proposer({}) of group({})", commits.size(), id, group.id());
         }
@@ -124,7 +127,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         }
 
         if (ctx.currentPhase().isReady()) {
-            if (ctx.valueCache().isEmpty()) {
+            if (ctx.value().readableBytes() == 0) {
                 if (isDebug()) {
                     logger.trace("nothing need to propose for proposer({}) of group({})", id, group.id());
                 }
@@ -241,12 +244,6 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         PaxosInstance instance = group.cache().createIfAbsent(instanceId);
         int holder = instance.hold(id);
         if (holder != id) {
-            /*
-             * it's a bug, once happened, do:
-             *
-             * 0. fail commits
-             * 1. free group this proposer belongs to
-             */
             fail(CommitResult.UNKNOWN_ERROR);
 
             String msg = String.format(
@@ -283,12 +280,14 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     }
 
     private void onInstanceDone() {
-        Proposal chosen = ctx.instance().chosen();
+        //Proposal chosen = ctx.instance().chosen();
+        /*
         if (chosen == null) {
             throw new IllegalStateException(
                 String.format("buggy, instance(%s) is still pending", ctx.instance().touch())
             );
         }
+        */
 
         /*
          * ths Paxos instance is done, but the value in this instance may
@@ -298,6 +297,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             logger.info(ctx.dumpChosenInstance());
         }
 
+        /*
         if (chosen.getNodeId() == ctx.nodeId()) {
             // it's enough, group id + current id must be unique
             ctx.clear();
@@ -309,6 +309,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             return ;
         }
 
+*/
         /*
          * it's not the value we proposed, try again in a new instance
          */
@@ -322,41 +323,45 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     private void start(ProposeContext ctx) {
         validate(ctx);
 
-        if (!ctx.currentPhase().isReady()) {
-            throw new IllegalStateException(
-                String.format("buggy, ctx should be ready currentPhase, but it's %s", ctx.currentPhase().name())
-            );
-        }
-
-        Proposal proposal = ctx.proposal();
-        if (proposal == null) {
-            throw new IllegalStateException("buggy, can't create proposal");
-        }
-
         PaxosConfig config = ctx.config();
-        AlgorithmPhase phase = getPhase();
         long instanceId = ctx.instanceId();
 
         if (isDebug()) {
             logger.trace(
                 "starts to propose the value in phase({}), instance({}), proposal({}), commits({}), currentPhase({}), config({})",
-                phase.name(),
+                ctx.phase().name(),
                 instanceId,
-                proposal.toString(),
+                ctx.ballot().toString(),
                 ctx.valueCache().size(),
                 ctx.currentPhase().name(),
                 config.toString()
             );
         }
 
+        Propose propose = new Propose();
+        propose.setNodeId(group.local().id());
+        propose.setValue(ctx.value());
+        propose.setInstanceId(ctx.instanceId());
+        propose.setProposerId(id);
+
         if (getPhase() == AlgorithmPhase.TWO_PHASE) {
-            // config.propose(instanceId, proposal);
+            propose.setSequence(ctx.ballot().getSequence());
+            propose.setOp(Opcode.PROPOSE);
+
             ctx.setStage(PaxosPhase.ACCEPT);
         } else {
-            // config.prepare(instanceId, proposal);
+            propose.setSequence(ctx.maxSequence() + 1);
+            propose.setOp(Opcode.PREPARE);
+
             ctx.setStage(PaxosPhase.PREPARE);
         }
+
+        for (Server server : config.servers()) {
+            server.send(propose);
+        }
     }
+
+
 
     private void validate(ProposeContext ctx) {
         Objects.requireNonNull(ctx, "ctx");
@@ -445,7 +450,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
                     AddressUtils.toString(reply.getAcceptorId()),
                     id,
                     group.id(),
-                    ctx.proposal().sequence,
+                    ctx.ballot().getSequence(),
                     ctx.instanceId(),
                     reply.getSequence(),
                     AddressUtils.toString(reply.getNodeId())
@@ -463,7 +468,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
                     AddressUtils.toString(reply.getAcceptorId()),
                     id,
                     group.id(),
-                    ctx.proposal().sequence,
+                    ctx.ballot().getSequence(),
                     ctx.instanceId()
                 );
             }
@@ -472,10 +477,10 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
             if (reply.isPrepareReply()) {
                 /*
-                 * this acceptor made this reply has accepted a value, propose
+                 * this acceptor made this reply has acceptor a value, propose
                  * other's value first if its proposal is greater
                  */
-                boolean isSmaller = ctx.proposal().compare(reply.getSequence(), reply.getNodeId()).isGreater();
+                boolean isSmaller = ctx.ballot().compare(reply.getSequence(), reply.getNodeId()).isGreater();
                 if (isSmaller) {
                     ByteBuf value = reply.getValue();
                     if (value == null) {
@@ -491,7 +496,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
                             AddressUtils.toString(reply.getNodeId()),
                             id,
                             group.id(),
-                            ctx.proposal().toString(),
+                            ctx.ballot().toString(),
                             reply.getSequence()
                         );
                     }
@@ -510,7 +515,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         /*
          * three state:
          *
-         * 0. accepted(accepted by a majority of members)
+         * 0. acceptor(acceptor by a majority of members)
          * 1. rejected
          * 2. pending(do nothing)
          */
@@ -521,7 +526,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             if (isDebug()) {
                 logger.trace(
                     "the prepare phase of proposal({}) of proposer({}/{}) is finished, go to the next phase",
-                    ctx.proposal().toString(),
+                    ctx.ballot().toString(),
                     id,
                     group.id()
                 );
@@ -537,7 +542,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             if (isDebug()) {
                 logger.trace(
                     "the proposal({}) of proposer({}/{}) is rejected, go to the next phase",
-                    ctx.proposal().toString(),
+                    ctx.ballot().toString(),
                     id,
                     group.id()
                 );
@@ -623,8 +628,8 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     private void chooseValue() {
         LearnValue msg = new LearnValue();
         msg.setInstanceId(ctx.instanceId());
-        msg.setNodeId(ctx.proposal().getNodeId());
-        msg.setSequence(ctx.proposal().getSequence());
+        msg.setNodeId(ctx.ballot().getNodeId());
+        msg.setSequence(ctx.ballot().getSequence());
 
         ctx.config().broadcast(msg);
     }

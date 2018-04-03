@@ -1,12 +1,17 @@
 package io.messaginglabs.reaver.core;
 
-import io.messaginglabs.reaver.com.msg.Prepare;
 import io.messaginglabs.reaver.com.msg.AcceptorReply;
 import io.messaginglabs.reaver.com.msg.Propose;
+import io.messaginglabs.reaver.dsl.PaxosGroup;
 import io.messaginglabs.reaver.group.InternalPaxosGroup;
+import io.messaginglabs.reaver.utils.AddressUtils;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
+
+    private static final Logger logger = LoggerFactory.getLogger(ParallelProposer.class);
 
     private final InstanceCache cache;
 
@@ -28,19 +33,8 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
         this.reply = new AcceptorReply();
     }
 
-    @Override
-    public AcceptorReply process(Prepare msg) {
-        Objects.requireNonNull(msg, "reply");
-
-        PaxosInstance instance = get(msg.getInstanceId());
-
-        // Tells the proposer proposed this reply msg if the instance is
-        // finished
-        if (instance.isDone()) {
-            return null;
-        }
-
-        Proposal proposal = instance.accepted();
+    private AcceptorReply processPrepare(Propose msg, PaxosInstance instance) {
+        Proposal proposal = instance.acceptor();
         Ballot.CompareResult result = proposal.compare(msg.getSequence(), msg.getNodeId());
 
         reply.setSequence(proposal.getSequence());
@@ -57,7 +51,7 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
             proposal.setNodeId(msg.getNodeId());
 
             if (proposal.getValue() != null) {
-                // this acceptor has accepted a value, tell the proposer
+                // this acceptor has acceptor a value, tell the proposer
                 // posted this msg that it should process the value first
                 reply.setOp(Opcode.PREPARE_REPLY);
                 reply.setValue(proposal.getValue());
@@ -69,18 +63,8 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
         return reply;
     }
 
-
-    @Override
-    public AcceptorReply process(Propose msg) {
-        Objects.requireNonNull(msg, "propose");
-
-        PaxosInstance instance = get(msg.getInstanceId());
-
-        if (instance.isDone()) {
-            return null;
-        }
-
-        Proposal proposal = instance.accepted();
+    private AcceptorReply processPropose(Propose msg, PaxosInstance instance) {
+        Proposal proposal = instance.acceptor();
         Ballot.CompareResult result = proposal.compare(msg.getSequence(), msg.getNodeId());
 
         reply.setInstanceId(msg.getInstanceId());
@@ -91,8 +75,6 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
         if (result.isSmaller()) {
             reply.setOp(Opcode.REJECT_ACCEPT);
         } else {
-            // Do logging
-
             proposal.setNodeId(msg.getNodeId());
             proposal.setSequence(msg.getSequence());
             proposal.setValue(msg.getValue());
@@ -101,6 +83,47 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
         }
 
         return reply;
+    }
+
+    @Override
+    public AcceptorReply process(Propose msg) {
+        Objects.requireNonNull(msg, "propose");
+
+        if (group.role() != PaxosGroup.Role.FORMAL) {
+            if (isDebug()) {
+                logger.debug("group can't vote for any proposal({}), it's ()", msg.toString(), group.role().name());
+            }
+
+            return null;
+        }
+
+        long instanceId = msg.getInstanceId();
+        long maxChosenInstance = group.ctx().maxSerialChosenInstance();
+        if (instanceId <= maxChosenInstance) {
+            if (isDebug()) {
+                logger.debug("the instance({}) from proposer({}) is chosen(max chosen({}))", instanceId, AddressUtils.toString(msg.getNodeId()), maxChosenInstance);
+            }
+
+            return null;
+        }
+
+        PaxosInstance instance = get(instanceId);
+        if (instance.isChosen()) {
+            if (isDebug()) {
+                logger.debug("instance({}) in group({}) is chosen, ignore ");
+            }
+
+            return null;
+        }
+
+        Opcode op = msg.op();
+        if (op.isPrepare()) {
+            return processPrepare(msg, instance);
+        } else if (op.isPropose()) {
+            return processPropose(msg, instance);
+        } else {
+            throw new IllegalArgumentException("unknown op: " + op.name());
+        }
     }
 
     private PaxosInstance get(long instanceId) {
@@ -120,7 +143,8 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
         return instance;
     }
 
-    @Override public void close() throws Exception {
+    @Override
+    public void close() throws Exception {
 
     }
 }

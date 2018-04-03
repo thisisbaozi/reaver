@@ -16,12 +16,14 @@ public class PaxosInstance extends AbstractReferenceCounted {
      */
     protected long id;
 
-    protected Proposal proposer;
-    protected Proposal accepted;
+    /*
+     * the acceptor has promised that do not accept any proposals less
+     * than this for this instance
+     */
+    protected Proposal acceptor;
 
-    // chosen proposal
-    protected Proposal chosen;
-    protected Proposal promised;
+    // chosen value
+    protected ByteBuf chosen;
 
     /*
      * -1 means no one holds this instance, otherwise it's the id of
@@ -57,24 +59,16 @@ public class PaxosInstance extends AbstractReferenceCounted {
         return id;
     }
 
-    public Proposal accepted() {
-        return accepted;
-    }
-
-    public Proposal promised() {
-        return promised;
-    }
-
-    public Proposal chosen() {
-        return chosen;
+    public Proposal acceptor() {
+        return acceptor;
     }
 
     public ByteBuf chosenValue(){
-        return chosen.getValue();
+        return chosen;
     }
 
-    public Proposal proposer() {
-        return proposer;
+    public void choose(ByteBuf value) {
+        this.chosen = value;
     }
 
     public int hold(int proposerId) {
@@ -87,10 +81,6 @@ public class PaxosInstance extends AbstractReferenceCounted {
     }
 
     public boolean isChosen() {
-        return false;
-    }
-
-    public boolean isConfig() {
         return false;
     }
 }

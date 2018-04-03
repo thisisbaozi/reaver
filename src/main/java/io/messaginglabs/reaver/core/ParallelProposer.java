@@ -28,6 +28,11 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
     private final SerialProposer[] proposers;
     private GenericCommit reserved = null;
 
+    /*
+     * for reducing memory footprint
+     */
+    private final Runnable proposeTask = this::propose;
+
     public ParallelProposer(int cacheCapacity, int maxBatchSize, int parallel) {
         super(null);
         if (cacheCapacity <= 0) {
@@ -64,7 +69,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
     }
 
     @Override
-    public CommitResult commit(ByteBuffer value, Object attachment) {
+    public CommitResult commit(ByteBuf value, Object attachment) {
         if (group().state() == PaxosGroup.State.FROZEN) {
             return CommitResult.FROZEN_GROUP;
         }
@@ -74,12 +79,8 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
         return enqueue(commit) ? CommitResult.OK : CommitResult.PROPOSE_THROTTLE;
     }
 
-    @Override public boolean close(long timeout) {
-        return false;
-    }
-
     @Override
-    public Commit commit(ByteBuffer value) {
+    public Commit commit(ByteBuf value) {
         GenericCommit commit = newCommit(value, null);
 
         if (group().state() == PaxosGroup.State.FROZEN) {
@@ -152,11 +153,6 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
 
         return true;
     }
-
-    /*
-     * for reducing memory footprint
-     */
-    private final Runnable proposeTask = this::propose;
 
     private void propose() {
         inLoop();
@@ -234,15 +230,8 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
                 break;
             }
 
-            /*
-             * now, cancelling is not supported
-             */
             batch.add(commit);
             bytes += commit.valueSize();
-
-            /*
-             * todo: statistics and trace
-             */
         }
 
         if (!batch.isEmpty()) {
@@ -262,12 +251,12 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
             /*
              * ignore it if a commit has been cancelled
              */
-            logger.info("a commit({}) posted to group({}) is cancelled, ignore it", commit.toString(), group().id());
+            logger.debug("a commit({}) posted to group({}) is cancelled, ignore it", commit.toString(), group().id());
             return true;
         }
 
         if (commit.isDone()) {
-            logger.info("a commit({}) posted to group({}) is done, ignore it", commit.toString(), group().id());
+            logger.debug("a commit({}) posted to group({}) is done, ignore it", commit.toString(), group().id());
             return true;
         }
 
@@ -287,21 +276,19 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
         return null;
     }
 
-    private ByteBuf copyValue(ByteBuffer src) {
-        ByteBufAllocator allocator = group().env().allocator;
-        ByteBuf buf = allocator.buffer(src.remaining());
-        buf.writeBytes(src);
-        return buf;
-    }
-
-    private GenericCommit newCommit(ByteBuffer value, Object attachment) {
+    private GenericCommit newCommit(ByteBuf value, Object attachment) {
         Objects.requireNonNull(value, "value");
 
-        if (!value.hasRemaining()) {
+        if (value.readableBytes() == 0) {
             throw new IllegalArgumentException("empty value is not allowed");
         }
 
-        return new GenericCommit(copyValue(value), attachment, CommitType.APP_VALUE);
+        return new GenericCommit(value, attachment, CommitType.APP_VALUE);
+    }
+
+    @Override
+    public boolean close(long timeout) {
+        return false;
     }
 
     @Override

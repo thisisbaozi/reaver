@@ -6,7 +6,6 @@ import io.messaginglabs.reaver.com.msg.Propose;
 
 public interface Acceptor extends Participant, AutoCloseable {
 
-    AcceptorReply process(Prepare prepare);
     AcceptorReply process(Propose propose);
 
 }

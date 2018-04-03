@@ -38,4 +38,5 @@ public interface InternalPaxosGroup extends PaxosGroup {
     void addCloseListener(Runnable runner);
     StateMachine getStateMachine();
 
+    GroupContext ctx();
 }

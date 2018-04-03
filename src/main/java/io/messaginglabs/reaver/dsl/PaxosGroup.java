@@ -4,6 +4,7 @@ import io.messaginglabs.reaver.config.ConfigEventsListener;
 import io.messaginglabs.reaver.config.ConfigView;
 import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.core.FollowContext;
+import io.netty.buffer.ByteBuf;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.Future;
@@ -44,16 +45,24 @@ public interface PaxosGroup {
     Role role();
 
     /**
+     * Allocates a buffer from group for avoiding memory copy and unnecessary
+     * memory allocation.
+     */
+    ByteBuf newBuffer(int capacity);
+
+    /**
      * Commits a value, the commit handle is used to know the result in asynchronous
      * way(By invoking {@link Commit#addListener(Consumer)}).
      */
     Commit commit(ByteBuffer value);
+    Commit commit(ByteBuf value);
 
     /**
      * Commits a value and attach a optional attachment. the value and attachment
      * is applied to the state machine registered to this group once the value was chosen.
      */
     CommitResult commit(ByteBuffer value, Object att);
+    CommitResult commit(ByteBuf value, Object att);
 
     /* config interface */
 

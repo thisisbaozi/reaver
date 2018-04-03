@@ -6,7 +6,6 @@ public class Proposal extends Ballot {
 
     private ByteBuf value;
 
-
     public ByteBuf getValue() {
         return value;
     }

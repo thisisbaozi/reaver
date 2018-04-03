@@ -78,7 +78,7 @@ public class GroupConfigControl implements ConfigControl {
     @Override
     public Future<ConfigView> join(List<Node> members) {
         synchronized (this) {
-            PaxosConfig config = configs.newest();
+            PaxosConfig config = configs.current();
             if (config != null) {
                 logger.info("this current({}) has already joined the group({})", ContainerUtils.toString(config.members(), "members"), group.id());
 
