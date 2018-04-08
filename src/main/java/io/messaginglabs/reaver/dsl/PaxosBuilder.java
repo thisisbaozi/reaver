@@ -3,6 +3,7 @@ package io.messaginglabs.reaver.dsl;
 import io.messaginglabs.reaver.com.Transporter;
 import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.log.LogStorage;
+import java.util.List;
 
 public interface PaxosBuilder {
 
@@ -26,7 +27,6 @@ public interface PaxosBuilder {
 
     /* com */
     void setNode(Node node);
-    void setTransporter(Transporter transporter);
 
     PaxosGroup build(StateMachine stateMachine) throws Exception;
 

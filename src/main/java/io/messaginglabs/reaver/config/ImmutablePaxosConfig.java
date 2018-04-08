@@ -71,6 +71,16 @@ public class ImmutablePaxosConfig implements PaxosConfig {
     }
 
     @Override
+    public Server find(long nodeId) {
+        for (Server server : servers) {
+            if (server.nodeId() == nodeId) {
+                return server;
+            }
+        }
+        return null;
+    }
+
+    @Override
     public void broadcast(Message msg) {
         for (Server server : servers) {
             server.send(msg);

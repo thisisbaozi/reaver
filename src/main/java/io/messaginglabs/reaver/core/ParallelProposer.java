@@ -1,8 +1,12 @@
 package io.messaginglabs.reaver.core;
 
+import com.sun.xml.internal.ws.addressing.v200408.MemberSubmissionWsaServerTube;
+import io.messaginglabs.reaver.com.msg.AcceptorReply;
+import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.dsl.Commit;
 import io.messaginglabs.reaver.dsl.CommitResult;
 import io.messaginglabs.reaver.dsl.PaxosGroup;
+import io.messaginglabs.reaver.group.InternalPaxosGroup;
 import io.messaginglabs.reaver.group.MultiPaxosGroup;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -33,8 +37,8 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
      */
     private final Runnable proposeTask = this::propose;
 
-    public ParallelProposer(int cacheCapacity, int maxBatchSize, int parallel) {
-        super(null);
+    public ParallelProposer(int cacheCapacity, int maxBatchSize, int parallel, InternalPaxosGroup group) {
+        super(group);
         if (cacheCapacity <= 0) {
             throw new IllegalArgumentException("value cache capacity must greater than 0, but given " + cacheCapacity);
         }
@@ -63,7 +67,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
         };
 
         for (int i = 0; i < parallel; i++) {
-            // this.proposers[i] = new DefaultSerialProposer(i, group().env());
+            this.proposers[i] = new DefaultSerialProposer(i, group);
             this.proposers[i].observe(SerialProposer.State.FREE, consumer);
         }
     }
@@ -195,7 +199,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
 
         int bytes = 0;
         List<GenericCommit> batch = proposer.valueCache();
-        for (;;) {
+        while (values.size() > 0) {
             GenericCommit commit;
             if (reserved != null) {
                 commit = reserved;
@@ -286,13 +290,23 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
         return new GenericCommit(value, attachment, CommitType.APP_VALUE);
     }
 
+    public void process(Message msg) {
+        Objects.requireNonNull(msg, "msg");
+
+        AcceptorReply reply = (AcceptorReply)msg;
+        int proposerId = reply.getProposerId();
+        SerialProposer proposer = proposers[proposerId];
+        proposer.process(reply);
+    }
+
+
     @Override
     public boolean close(long timeout) {
         return false;
     }
 
     @Override
-    public MultiPaxosGroup group() {
-        return null;
+    public InternalPaxosGroup group() {
+        return group;
     }
 }

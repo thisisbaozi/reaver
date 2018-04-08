@@ -23,6 +23,8 @@ public interface PaxosConfig {
 
     boolean isMember(long nodeId);
 
+    Server find(long nodeId);
+
     /**
      * Returns the members in this config, they are acceptors instead of
      * learners, followers or proposers.

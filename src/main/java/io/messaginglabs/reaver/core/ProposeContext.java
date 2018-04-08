@@ -1,7 +1,6 @@
 package io.messaginglabs.reaver.core;
 
 import io.messaginglabs.reaver.config.PaxosConfig;
-import io.messaginglabs.reaver.dsl.Commit;
 import io.netty.buffer.ByteBuf;
 import java.util.ArrayList;
 import java.util.List;
@@ -9,6 +8,7 @@ import java.util.Objects;
 
 public class ProposeContext {
 
+    private int groupId;
     private long commit;
 
     /*
@@ -24,24 +24,34 @@ public class ProposeContext {
      */
     private int times;
 
-    private PaxosPhase stage;
+    private PaxosPhase stage = PaxosPhase.READY;
 
 
     private List<GenericCommit> commits = new ArrayList<>();
-    private ByteBuf value;
+    private ByteBuf buffer;
 
     // the id of Paxos instance this proposal associated with
-    private long instanceId;
+    private long instanceId = Defines.VOID_INSTANCE_ID;
     private int sequence;
 
     // the instance propose this proposal based on the config
     private PaxosConfig config;
-    private AlgorithmPhase phase;
+    private AlgorithmPhase phase = AlgorithmPhase.TWO_PHASE;
     private ByteBuf tmpValue;
 
     private final Ballot proposed = new Ballot();
     private final Ballot maxPromised = new Ballot();
     private final VotersCounter counter = new VotersCounter();
+
+    public ProposeContext(ByteBuf buffer) {
+        Objects.requireNonNull(buffer, "buffer");
+
+        if (buffer.isReadOnly()) {
+            throw new IllegalArgumentException("read only buffer");
+        }
+
+        this.buffer = buffer;
+    }
 
     public void setCommits(List<GenericCommit> commits) {
         Objects.requireNonNull(commits, "commits");
@@ -66,6 +76,17 @@ public class ProposeContext {
             this.commits.addAll(commits);
         }
 
+        this.commit = System.currentTimeMillis();
+    }
+
+    private void mergeValue() {
+        // reserve a number of bytes used to save Paxos information:
+        // 0. group id
+        // 1. instance id
+        // 2. the number of entries
+        this.buffer.writeInt(groupId);
+        this.buffer.writeLong(instanceId);
+        this.buffer.writeInt(this.commits.size());
         int size = this.commits.size();
         for (int i = 0; i < size; i++) {
             GenericCommit commit = this.commits.get(i);
@@ -73,19 +94,17 @@ public class ProposeContext {
             ByteBuf value = commit.value();
             if (value.refCnt() == 0) {
                 throw new IllegalStateException(
-                    String.format("buggy, the count of ref of value(%s) at %d is 0", commit.toString(), i)
+                    String.format("buggy, the count of ref of buffer(%s) at %d is 0", commit.toString(), i)
                 );
             }
 
-            this.value.writeBytes(value);
+            this.buffer.writeBytes(value);
 
             /*
-             * proposer doesn't rely on this value any more, release it.
+             * proposer doesn't rely on this buffer any more, release it.
              */
             value.release();
         }
-
-        this.commit = System.currentTimeMillis();
     }
 
     public void reset(long instanceId, PaxosConfig config, long nodeId) {
@@ -96,7 +115,7 @@ public class ProposeContext {
         }
 
         // Checks whether or not there's already one proposal is in progress
-        if (this.instanceId != -1) {
+        if (this.instanceId != Defines.VOID_INSTANCE_ID) {
             throw new IllegalStateException(
                 String.format("instance(%d) is in progress, can't propose a new one(%d)", this.instanceId, instanceId)
             );
@@ -108,14 +127,13 @@ public class ProposeContext {
         this.end = 0;
         this.times = 0;
         this.sequence = 0;
+        this.proposed.setNodeId(nodeId);
+        this.proposed.setSequence(0);
+        this.mergeValue();
     }
 
     public void clear() {
 
-    }
-
-    public void set(ByteBuf buffer) {
-        this.value = buffer;
     }
 
     public void setOtherValue(ByteBuf value) {
@@ -127,7 +145,7 @@ public class ProposeContext {
     }
 
     public ByteBuf value() {
-        return value;
+        return buffer;
     }
 
     public int delay() {

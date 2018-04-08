@@ -2,7 +2,7 @@ package io.messaginglabs.reaver.core;
 
 import java.util.concurrent.atomic.AtomicLong;
 
-public class ProposalSequencer extends AtomicLong implements Sequencer {
+public class InstanceSequencer extends AtomicLong implements Sequencer {
 
     private static final long serialVersionUID = -8419501777390345574L;
 
@@ -13,7 +13,7 @@ public class ProposalSequencer extends AtomicLong implements Sequencer {
 
     @Override
     public String toString() {
-        return "ProposalSequencer{ " + super.toString()  + "}";
+        return "InstanceSequencer{ " + super.toString()  + "}";
     }
 
 }

@@ -1,6 +1,5 @@
 package io.messaginglabs.reaver.core;
 
-import io.messaginglabs.reaver.com.msg.Prepare;
 import io.messaginglabs.reaver.com.msg.AcceptorReply;
 import io.messaginglabs.reaver.com.msg.Propose;
 

@@ -1,8 +1,10 @@
 package io.messaginglabs.reaver.group;
 
 import io.messaginglabs.reaver.com.Server;
+import io.messaginglabs.reaver.com.msg.AcceptorReply;
 import io.messaginglabs.reaver.com.msg.LearnValue;
 import io.messaginglabs.reaver.com.msg.Message;
+import io.messaginglabs.reaver.com.msg.Propose;
 import io.messaginglabs.reaver.com.msg.Reconfigure;
 import io.messaginglabs.reaver.config.PaxosConfig;
 import io.messaginglabs.reaver.config.ConfigEventsListener;
@@ -23,7 +25,9 @@ import io.messaginglabs.reaver.core.Opcode;
 import io.messaginglabs.reaver.core.ParallelAcceptor;
 import io.messaginglabs.reaver.core.ParallelProposer;
 import io.messaginglabs.reaver.core.PaxosInstance;
+import io.messaginglabs.reaver.core.InstanceSequencer;
 import io.messaginglabs.reaver.core.Proposer;
+import io.messaginglabs.reaver.core.Sequencer;
 import io.messaginglabs.reaver.core.Value;
 import io.messaginglabs.reaver.core.ValueType;
 import io.messaginglabs.reaver.core.ValueUtils;
@@ -32,13 +36,16 @@ import io.messaginglabs.reaver.dsl.CommitResult;
 import io.messaginglabs.reaver.dsl.PaxosGroup;
 import io.messaginglabs.reaver.dsl.GroupStatistics;
 import io.messaginglabs.reaver.dsl.StateMachine;
+import io.messaginglabs.reaver.utils.AddressUtils;
 import io.messaginglabs.reaver.utils.ContainerUtils;
 import io.netty.buffer.ByteBuf;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,7 +57,7 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
     private final int id;
     private PaxosGroup.State state;
     private PaxosGroup.Role role;
-
+    private GroupContext ctx;
     private final GroupEnv env;
     private final GroupOptions options;
 
@@ -64,6 +71,7 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
 
     // config
     private final GroupConfigs configs;
+    private final Sequencer sequencer;
 
     // cache
     private final InstanceCache cache;
@@ -90,6 +98,8 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
             logger.info("group({}) do not store config", id);
         }
 
+        this.ctx = new PaxosGroupCtx();
+        this.sequencer = new InstanceSequencer();
         this.configs = new PaxosGroupConfigs(this, storage);
         this.cache = new DefaultInstanceCache(1024 * 4, Defines.CACHE_MAX_CAPACITY);
     }
@@ -111,88 +121,85 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
     @Override
     public void join(List<Node> members) {
         synchronized (configs) {
-            if (state != State.NOT_STARTED) {
-                throw new IllegalStateException(
-                    String.format("state of group(%d) is %s, can't join again", id, state.name())
-                );
-            }
-
-            if (role == Role.FOLLOWER) {
-                stopFollow();
-            }
-
-            Role current = role;
-            role = Role.FORMAL;
-            logger.info("current({}) try join to the group({}) in role({}), old role({})", local().toString(), id, role.name(), current.name());
-
             initParticipants();
 
-            PaxosConfig config = configs.current();
-            if (config != null) {
-                initCache();
-                replay();
-
+            if (role == Role.FOLLOWER) {
+                becomeFormal();
                 return ;
             }
 
-            if (!doJoin(members)) {
+            if (state != State.NOT_STARTED) {
                 throw new IllegalStateException(
-                    String.format("member(%s) of group(%d) can't join through members(%s)", local().toString(), id, ContainerUtils.toString(members, "members"))
+                    String.format("this node has already joined the group(%d)", id)
                 );
             }
 
-            // Wait until this current joined the group
-            waitUntilJoined();
+            if (configs.size() == 0) {
+                /*
+                 * either this node is the first one or it joins the group by
+                 * the given seed nodes.
+                 */
+                if (isBoot(members)) {
+                    joinAsBoot();
+                } else {
+                    boolean sent = false;
+                    for (Node member : members) {
+                        if (!member.equals(local())) {
+                            if (join(member)) {
+                                logger.info("try to join the group({}) through the member({})", id, member.toString());
+                                sent = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!sent) {
+                        throw new IllegalStateException(String.format(
+                            "can't join the group(%d) via seed nodes(%s)",
+                            id,
+                            ContainerUtils.toString(members, "members")
+                        ));
+                    }
+                }
+            } else {
+                doJoin();
+            }
+
+            state = State.RUNNING;
+            role = Role.FORMAL;
         }
     }
 
-    private void waitUntilJoined() {
+    private void doJoin() {
 
     }
 
-    private void stopFollow() {
-
-    }
-
-    private void initCache() {
-
-    }
-
-    private void replay() {
+    private void becomeFormal() {
 
     }
 
     private void initParticipants() {
-        if (role == Role.FORMAL) {
-            if (proposer == null) {
-                proposer = new ParallelProposer(options.valueCacheCapacity, options.batch, options.pipeline);
-            }
-
-            if (acceptor == null) {
-                acceptor = new ParallelAcceptor(this);
-            }
-        }
-    }
-
-    private boolean doJoin(List<Node> members) {
-        ContainerUtils.checkNotEmpty(members, "members");
-
-        if (logger.isInfoEnabled()) {
-            logger.info(
-                "this current({}) try to join the group({}) based on the given donors({})",
-                local().toString(),
-                id,
-                ContainerUtils.toString(members, "members")
+        if (proposer == null) {
+            proposer = new ParallelProposer(
+                options.valueCacheCapacity,
+                options.batch,
+                options.pipeline,
+                this
             );
         }
 
-        for (Node member : members) {
-            if (member.equals(local())) {
-                continue;
-            }
+        if (acceptor == null) {
+            acceptor = new ParallelAcceptor(this);
+        }
+    }
 
-            if (join(member)) {
-                logger.info("try to join the group({}) through the member({})", id, member.toString());
+    private boolean isBoot(List<Node> members) {
+        if (members == null || members.isEmpty()) {
+            return true;
+        }
+
+        if (members.size() == 1) {
+            if (members.get(0).equals(local())) {
                 return true;
             }
         }
@@ -200,18 +207,93 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
         return false;
     }
 
+
+    private void joinAsBoot() {
+        if (configs.size() > 0) {
+            throw new IllegalStateException("there's already some configurations");
+        }
+
+        List<Member> members = new ArrayList<>();
+        Member member = new Member();
+        member.setMaxVersion(Defines.MAX_VERSION_SUPPORTED);
+        member.setMinVersion(Defines.MIN_VERSION_SUPPORTED);
+        member.setPort(options.node.getPort());
+        member.setIp(options.node.getIp());
+        members.add(member);
+
+        PaxosConfig config = configs.build(0, 0, members);
+        if (config == null) {
+            throw new IllegalStateException("buggy, can't build first config");
+        }
+        applyConfig(config);
+
+        // reset the instance id
+        resetSequencer();
+    }
+
+    private void applyConfig(PaxosConfig config) {
+        Objects.requireNonNull(config, "config");
+
+        logger.info("apply new config(begin({}), src({}) members({})) to group({})", config.begin(), config.instanceId(), Arrays.toString(config.members()), id);
+
+        if (ctx.maxSeenInstanceId() < config.begin()) {
+            if (logger.isInfoEnabled()) {
+                logger.info("max instance id this node seen is {}, reset to {}", ctx.maxSeenInstanceId(), config.begin());
+            }
+
+            ctx.maxSeenInstanceId(config.begin());
+        }
+
+        configs.add(config);
+    }
+
+    private void resetSequencer() {
+        long beginInstanceId = 0;
+        if (ctx.maxSeenInstanceId() == 0) {
+            beginInstanceId = 1;
+        }
+
+        sequencer.set(beginInstanceId);
+
+        logger.info("resets the begin instance id to {} for group({})", beginInstanceId, id);
+    }
+
+    private Member current() {
+        Member member = new Member();
+        member.setMaxVersion(Defines.MAX_VERSION_SUPPORTED);
+        member.setMinVersion(Defines.MIN_VERSION_SUPPORTED);
+        member.setPort(options.node.getPort());
+        member.setIp(options.node.getIp());
+        return member;
+    }
+
     private boolean join(Node node) {
         /*
          * connect with the given current and send it a message that this current
          * wants to join the group
          */
+        long timeout = 3000;
         Server server = env.connector.connect(node.getIp(), node.getPort());
-        // boolean result = server.join(id, local());
 
-        /*
-         * if others rely on this server, they should connect with it by themselves
-         */
-        server.release();
+        try {
+            if (!server.connect(timeout)) {
+                logger.info("can't connect with node({})", node.toString());
+                return false;
+            }
+
+            assert (server.isActive());
+
+            Reconfigure reconfigure = new Reconfigure();
+            reconfigure.setOp(Opcode.JOIN_GROUP);
+            reconfigure.setMembers(ContainerUtils.toList(current()));
+            server.send(reconfigure, timeout);
+
+            return true;
+        } catch (InterruptedException | TimeoutException cause) {
+            logger.info("can't join the group({}) through node({})", id, node.toString());
+        } finally {
+            server.release();
+        }
 
         return false;
     }
@@ -228,7 +310,7 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
 
     @Override
     public GroupOptions options() {
-        return null;
+        return options;
     }
 
     @Override
@@ -238,7 +320,7 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
          *
          * 0. too many finished instances in cache(Applier is too slow)
          */
-        return true;
+        return false;
     }
 
     @Override
@@ -254,25 +336,12 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
 
     @Override
     public InstanceCache cache() {
-        return null;
-    }
-
-    private void startTasks() {
-        // heartbeat task
-
-        // detect task
-
-        //
-    }
-
-    @Override
-    public void boot() {
-
+        return cache;
     }
 
     @Override
     public Node local() {
-        return null;
+        return options.node;
     }
 
     private void checkState() {
@@ -377,7 +446,7 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
 
     @Override
     public GroupConfigs configs() {
-        return null;
+        return configs;
     }
 
     @Override
@@ -387,7 +456,7 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
         int dstId = msg.getGroupId();
         if (dstId != id) {
             throw new IllegalStateException(
-                String.format("buggy, group(%d) can't process messages belong to group(%d)", id, dstId)
+                String.format("buggy, group(%d) can't process messages belong to group(%d), msg(%s)", id, dstId, msg.toString())
             );
         }
 
@@ -406,12 +475,79 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
         if (isConfig(msg.op())) {
             processConfig((Reconfigure)msg);
         } else if (isLearner(msg)) {
+            processLearner(msg);
+        } else if (isAcceptor(msg)) {
+            // find the server
+            Propose propose = (Propose)msg;
+            PaxosConfig config = configs.match(propose.getInstanceId());
+            if (config == null) {
+                if (logger.isDebugEnabled()) {
+                    logger.warn(
+                        "acceptor in group({}) fall behind(current config={}), ignore message(instance={}) from proposer({})",
+                        id,
+                        configs.current().begin(),
+                        propose.getInstanceId(),
+                        AddressUtils.toString(propose.getNodeId())
+                    );
+                }
+                return ;
+            }
 
+            AcceptorReply reply = acceptor.process(propose);
+            if (reply != null) {
+                long proposerId = propose.getNodeId();
+                if (logger.isTraceEnabled()) {
+                    logger.trace("");
+                }
+
+                reply(proposerId, config, reply);
+            }
+        } else if (isProposer(msg)) {
+            proposer.process(msg);
         }
     }
 
+    private boolean isProposer(Message msg) {
+        return msg.isEmptyPrepareReply()
+            || msg.isAcceptRejected()
+            || msg.isPrepareReply()
+            || msg.isAccepted();
+    }
+
+
+    private void reply(long from, PaxosConfig config, AcceptorReply reply) {
+        Objects.requireNonNull(reply, "reply");
+
+        /*
+         * process the reply directly if the proposer is local
+         */
+        if (isLocal(from)) {
+            process(reply);
+        } else {
+            /*
+             * either this proposer is a member of the config, or it's a independent
+             * node.
+             */
+            Server server = config.find(from);
+            if (server != null) {
+                server.send(reply);
+            } else {
+                // todo: it's a independent proposer
+            }
+        }
+    }
+
+    private boolean isLocal(long nodeId) {
+        return local().id() == nodeId;
+    }
+
+
+    private boolean isAcceptor(Message msg) {
+        return msg.isPrepare() || msg.isPropose();
+    }
+
     private boolean isConfig(Opcode op) {
-        return op == Opcode.JOIN_GROUP;
+        return op.isJoinGroup();
     }
 
     private boolean isLearner(Message msg) {
@@ -446,55 +582,66 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
         processChosenValues();
     }
 
-    private long checkpoint = 0;
+    private long executeCheckpoint = 1;
+    private long applyCheckpoint = 0;
     private List<PaxosInstance> chosen = new ArrayList<>();
     private List<PaxosInstance> batch = new ArrayList<>();
 
-    private int getSequentialChosenInstances(List<PaxosInstance> chosen) {
-        int count = 0;
-        for (;;) {
-            PaxosInstance instance = cache.get(checkpoint);
-            if (instance != null && instance.isChosen()) {
-                chosen.add(instance);
-                count++;
-                continue;
-            }
-
-            break;
+    private PaxosInstance getSequentialChosenInstances(long instanceId) {
+        PaxosInstance instance = cache.get(instanceId);
+        if (instance != null && instance.isChosen()) {
+            return instance;
         }
-        return count;
+
+        // Do we need to learn chosen values from other nodes?
+
+        return null;
     }
 
     private void processChosenValues() {
-        int count = getSequentialChosenInstances(chosen);
-        if (count == 0) {
+        PaxosInstance instance = getSequentialChosenInstances(executeCheckpoint);
+        if (instance == null) {
             return ;
         }
 
-        for (int i = 0; i < count; i++) {
-            PaxosInstance instance = chosen.get(i);
-            ByteBuf value = instance.chosenValue();
-
-        }
-    }
-
-    private void applyReconfiguration(PaxosInstance instance) {
-        ByteBuf value = instance.chosenValue();
-        if (value == null) {
-            throw new IllegalArgumentException("no chosen value");
-        }
-
-        if (value.readableBytes() == 0) {
-            // a empty value?
-            return ;
+        ByteBuf chosenValue = instance.chosenValue();
+        if (chosenValue == null) {
+            throw new IllegalStateException("buggy, no chosen value");
         }
 
         // parse type
-        ValueType type = ValueUtils.parse(value);
-        if (type == null) {
-            throw new IllegalStateException("can't parse the type of value");
+        ValueType type = parseType(chosenValue);
+        if (isReconfigure(type)) {
+            applyReconfiguration(type, instance);
         }
 
+        applyValue(type, instance);
+    }
+
+    public boolean isAppData(ValueType type) {
+        return type.isAppData();
+    }
+
+    public boolean isReconfigure(ValueType type) {
+        return type.isMemberJoin() || type.isRemoveMember();
+    }
+
+    private ValueType parseType(ByteBuf chosenValue) {
+        int offset = 16;    // skip Pxaos properties
+        offset += 4;        // skip checksum
+
+        int header = chosenValue.getInt(chosenValue.readerIndex() + offset);
+        ValueType type = ValueUtils.parse(header);
+        if (type == null) {
+            throw new IllegalStateException(
+                String.format("buggy, can't parse the type of value from header(%d)", header)
+            );
+        }
+
+        return type;
+    }
+
+    private void applyReconfiguration(ValueType type, PaxosInstance instance) {
         // the instance id must greater than current config
         PaxosConfig config = configs.current();
         if (instance.id() <= config.instanceId()) {
@@ -512,8 +659,10 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
          */
     }
 
-    private void applyAppValues(List<PaxosInstance> batch) {
-
+    private void applyValue(ValueType type, PaxosInstance instance) {
+        if (isAppData(type)) {
+            applier.apply(instance);
+        }
     }
 
     private boolean hasLearned(PaxosInstance instance) {
@@ -528,25 +677,29 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
             );
         }
 
-        if (msg.op() == Opcode.JOIN_GROUP) {
-            List<Member> members = msg.getMembers();
+        if (msg.op().isJoinGroup()) {
+            memberJoin(msg);
+        }
+    }
 
-            if (logger.isInfoEnabled()) {
-                logger.info("a member({}) try to join this group({})", ContainerUtils.toString(members, "members"), id);
-            }
+    private void memberJoin(Reconfigure msg) {
+        List<Member> members = msg.getMembers();
 
-            if (members.size() != 1) {
-                throw new IllegalStateException(
-                    String.format("a reconfiguration process one member, but the size of members is %d", members.size())
-                );
-            }
+        if (logger.isInfoEnabled()) {
+            logger.info("a member({}) try to join this group({})", ContainerUtils.toString(members, "members"), id);
+        }
 
-            ByteBuf buf = msg.encode(env.allocator.buffer(1024));
-            try {
-                commit(buf.nioBuffer(), null);
-            } finally {
-                buf.release();
-            }
+        if (members.size() != 1) {
+            throw new IllegalStateException(
+                String.format("a reconfiguration process one member, but the size of members is %d", members.size())
+            );
+        }
+
+        ByteBuf buf = msg.encode(env.allocator.buffer(1024));
+        try {
+            commit(buf.nioBuffer(), null);
+        } finally {
+            buf.release();
         }
     }
 
@@ -684,8 +837,14 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
         }
     }
 
-    @Override public GroupContext ctx() {
-        return null;
+    @Override
+    public GroupContext ctx() {
+        return ctx;
+    }
+
+    @Override
+    public Sequencer sequencer() {
+        return sequencer;
     }
 
     @Override

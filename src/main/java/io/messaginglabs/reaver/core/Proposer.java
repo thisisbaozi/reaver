@@ -1,5 +1,6 @@
 package io.messaginglabs.reaver.core;
 
+import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.dsl.Commit;
 import io.messaginglabs.reaver.dsl.CommitResult;
 import io.netty.buffer.ByteBuf;
@@ -11,4 +12,6 @@ public interface Proposer extends Participant {
     CommitResult commit(ByteBuf value, Object attachment);
 
     boolean close(long timeout);
+
+    void process(Message msg);
 }

@@ -2,6 +2,7 @@ package io.messaginglabs.reaver.dsl;
 
 import io.messaginglabs.reaver.config.ConfigEventsListener;
 import io.messaginglabs.reaver.config.ConfigView;
+import io.messaginglabs.reaver.config.Member;
 import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.core.FollowContext;
 import io.netty.buffer.ByteBuf;

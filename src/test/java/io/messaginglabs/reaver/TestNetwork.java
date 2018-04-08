@@ -62,9 +62,8 @@ public class TestNetwork {
         Thread.sleep(100);
         Assert.assertEquals(entries.size(), 1);
 
-        Reconfigure reconfigure1 = new Reconfigure();
         ByteBuf data = entries.poll();
-        reconfigure1.decode(data);
+        Reconfigure reconfigure1 = Reconfigure.decode(data);
         Assert.assertEquals(reconfigure.getMembers().size(), reconfigure1.getMembers().size());
         data.release();
     }

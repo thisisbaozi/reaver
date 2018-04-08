@@ -35,6 +35,8 @@ public class DefaultInstanceCache implements InstanceCache {
             } else {
                 instance = new ReusableInstance();
             }
+
+            map.put(id, instance);
         } else {
             instance = cache.remove(0);
         }

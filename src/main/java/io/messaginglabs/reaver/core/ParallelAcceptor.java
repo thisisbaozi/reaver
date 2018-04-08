@@ -71,6 +71,7 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
         reply.setSequence(proposal.getSequence());
         reply.setAcceptorId(group().local().id());
         reply.setNodeId(proposal.getNodeId());
+        reply.setGroupId(msg.getGroupId());
 
         if (result.isSmaller()) {
             reply.setOp(Opcode.REJECT_ACCEPT);
@@ -89,6 +90,12 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
     public AcceptorReply process(Propose msg) {
         Objects.requireNonNull(msg, "propose");
 
+        /*
+         * two things we need to check before voting for any proposal:
+         *
+         * 0. this node is a FORMAL participant instead of a UNKNOWN or FOLLOWER node.
+         * 1. the instance id the given message contains is not a chosen one.
+         */
         if (group.role() != PaxosGroup.Role.FORMAL) {
             if (isDebug()) {
                 logger.debug("group can't vote for any proposal({}), it's ()", msg.toString(), group.role().name());
@@ -98,10 +105,32 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
         }
 
         long instanceId = msg.getInstanceId();
-        long maxChosenInstance = group.ctx().maxSerialChosenInstance();
+        if (instanceId == Defines.VOID_INSTANCE_ID) {
+            throw new IllegalArgumentException("buggy, void instance id in msg: " + msg.toString());
+        }
+
+        if (isDebug()) {
+            logger.debug(
+                "the acceptor(group={}, promised={}) starts to process the message({}/{}/{}:{}/{}) from proposer({})",
+                group.id(),
+                msg.type().name(),
+                msg.getInstanceId(),
+                msg.getNodeId(),
+                msg.getSequence(),
+                msg.getValue().readableBytes(),
+                AddressUtils.toString(msg.getNodeId())
+            );
+        }
+
+        long maxChosenInstance = group.ctx().maxSerialChosenInstanceId();
         if (instanceId <= maxChosenInstance) {
             if (isDebug()) {
-                logger.debug("the instance({}) from proposer({}) is chosen(max chosen({}))", instanceId, AddressUtils.toString(msg.getNodeId()), maxChosenInstance);
+                logger.debug(
+                    "the instance({}) from proposer({}) is chosen(max chosen({}))",
+                    instanceId,
+                    AddressUtils.toString(msg.getNodeId()),
+                    maxChosenInstance
+                );
             }
 
             return null;
@@ -110,10 +139,20 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
         PaxosInstance instance = get(instanceId);
         if (instance.isChosen()) {
             if (isDebug()) {
-                logger.debug("instance({}) in group({}) is chosen, ignore ");
+                logger.debug(
+                    "the instance({}) has chosen a value, ignore message({}) from proposer({})",
+                    instanceId,
+                    msg.type().name(),
+                    AddressUtils.toString(msg.getNodeId())
+                );
             }
 
-            return null;
+            // the proposer sent this message should learn the chosen instance ASAP
+            reply.setInstanceId(instanceId);
+            reply.setGroupId(msg.getGroupId());
+            reply.setOp(Opcode.LEARN_VALUE);
+            reply.setValue(instance.chosenValue());
+            return reply;
         }
 
         Opcode op = msg.op();
@@ -121,9 +160,9 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
             return processPrepare(msg, instance);
         } else if (op.isPropose()) {
             return processPropose(msg, instance);
-        } else {
-            throw new IllegalArgumentException("unknown op: " + op.name());
         }
+
+        throw new IllegalArgumentException("unknown op: " + op.name());
     }
 
     private PaxosInstance get(long instanceId) {

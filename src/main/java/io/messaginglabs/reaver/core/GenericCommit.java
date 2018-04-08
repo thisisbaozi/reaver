@@ -46,7 +46,6 @@ public class GenericCommit extends ArrayList<GenericCommit.Pair> implements Comm
         this.done = -1;
         this.instanceId = Defines.VOID_INSTANCE_ID;
         this.stage = Stage.READY;
-        this.result = CommitResult.UNKNOWN_ERROR;
     }
 
     @Override

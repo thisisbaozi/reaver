@@ -7,6 +7,7 @@ import io.netty.util.AbstractReferenceCounted;
 import io.netty.util.ReferenceCounted;
 import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,8 +33,23 @@ public class LocalServer extends AbstractReferenceCounted implements Server {
     }
 
     @Override
+    public void send(Message msg, long timeout) throws TimeoutException, InterruptedException {
+        send(msg);
+    }
+
+    @Override
+    public boolean connect(long timeout) throws InterruptedException {
+        return true;
+    }
+
+    @Override
     public String address() {
         return group.local().toString();
+    }
+
+    @Override
+    public long nodeId() {
+        return group.local().id();
     }
 
     @Override

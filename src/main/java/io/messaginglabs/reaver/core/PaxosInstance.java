@@ -20,7 +20,7 @@ public class PaxosInstance extends AbstractReferenceCounted {
      * the acceptor has promised that do not accept any proposals less
      * than this for this instance
      */
-    protected Proposal acceptor;
+    protected Proposal acceptor = new Proposal();
 
     // chosen value
     protected ByteBuf chosen;
@@ -81,6 +81,6 @@ public class PaxosInstance extends AbstractReferenceCounted {
     }
 
     public boolean isChosen() {
-        return false;
+        return chosen != null;
     }
 }

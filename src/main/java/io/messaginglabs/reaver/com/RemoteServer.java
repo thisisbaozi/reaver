@@ -1,6 +1,7 @@
 package io.messaginglabs.reaver.com;
 
 import io.messaginglabs.reaver.com.msg.Message;
+import io.messaginglabs.reaver.utils.AddressUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
@@ -11,6 +12,8 @@ import io.netty.util.ReferenceCounted;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +24,7 @@ public class RemoteServer extends AbstractReferenceCounted implements Server {
 
     private final String ip;
     private final int port;
+    private final long nodeId;
     private final boolean debug;
 
     private int deadline = 1500;
@@ -50,6 +54,7 @@ public class RemoteServer extends AbstractReferenceCounted implements Server {
         this.port = port;
         this.debug = debug;
         this.transporter = bootstrap;
+        this.nodeId = AddressUtils.composite(ip, port);
 
         connect();
     }
@@ -75,6 +80,11 @@ public class RemoteServer extends AbstractReferenceCounted implements Server {
     @Override
     public String address() {
         return String.format("%s:%d", ip, port);
+    }
+
+    @Override
+    public long nodeId() {
+        return nodeId;
     }
 
     public int pendingSize() {
@@ -127,6 +137,32 @@ public class RemoteServer extends AbstractReferenceCounted implements Server {
         return ch != null && ch.isActive();
     }
 
+    @Override
+    public boolean connect(long timeout) throws InterruptedException {
+        synchronized (this) {
+            if (isActive()) {
+                return true;
+            }
+
+            connect();
+
+            // blocking until the connection is completed
+            ChannelFuture future = this.future;
+            if (future != null) {
+                if (!future.await(timeout, TimeUnit.MILLISECONDS)) {
+                    return false;
+                }
+
+                if (future.isSuccess()) {
+                    return future.channel() != null && future.channel().isActive();
+                }
+            }
+
+            return isActive();
+        }
+    }
+
+    @Override
     public void connect() {
         synchronized (this) {
             if (isActive()) {
@@ -253,6 +289,19 @@ public class RemoteServer extends AbstractReferenceCounted implements Server {
         }
 
         doWrite(ch, buf);
+    }
+
+    @Override
+    public void send(Message msg, long timeout) throws TimeoutException, InterruptedException {
+        ByteBuf buf = serialize(msg);
+
+        if (!isActive()) {
+            cache(buf);
+            connect();
+            return ;
+        }
+
+        ch.writeAndFlush(buf).await(timeout, TimeUnit.MILLISECONDS);
     }
 
     private void doWrite(Channel ch, ByteBuf buf) {

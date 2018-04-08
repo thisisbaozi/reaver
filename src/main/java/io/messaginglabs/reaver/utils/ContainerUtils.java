@@ -1,7 +1,9 @@
 package io.messaginglabs.reaver.utils;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.Objects;
 
 public final class ContainerUtils {
@@ -47,6 +49,12 @@ public final class ContainerUtils {
         if (msg.isEmpty()) {
             throw new IllegalArgumentException(String.format("%s can't be empty", msg));
         }
+    }
+
+    public static <T> List<T> toList(T element) {
+        List<T> elements = new ArrayList<>();
+        elements.add(element);
+        return elements;
     }
 
 }

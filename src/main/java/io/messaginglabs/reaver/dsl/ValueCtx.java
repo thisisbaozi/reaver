@@ -2,9 +2,6 @@ package io.messaginglabs.reaver.dsl;
 
 import io.netty.buffer.ByteBuf;
 
-/**
- * A failed commit means the Paxos can't commit the value due to some errors.
- */
 public interface ValueCtx {
 
     /**

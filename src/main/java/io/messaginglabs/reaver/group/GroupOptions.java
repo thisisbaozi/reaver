@@ -1,5 +1,6 @@
 package io.messaginglabs.reaver.group;
 
+import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.dsl.ElectionPolicy;
 import io.messaginglabs.reaver.dsl.LeaderSelector;
 
@@ -10,7 +11,6 @@ public class GroupOptions {
 
     public int valueCacheCapacity;
     public int retryInterval;
-    public int useConfigSpan;
 
     public boolean reserveConfig;
     public boolean statistics;
@@ -23,4 +23,6 @@ public class GroupOptions {
 
     /* logging */
     public String path;
+    public Node node;
+
 }

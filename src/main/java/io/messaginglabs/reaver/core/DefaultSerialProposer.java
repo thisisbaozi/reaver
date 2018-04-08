@@ -34,12 +34,11 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
      * the task is response for checking whether or not a proposal is
      * expired
      */
-    private final ScheduledFuture<?> task;
+    // private final ScheduledFuture<?> task;
     private final Sequencer sequencer;
 
-    public DefaultSerialProposer(int id, Sequencer sequencer, InternalPaxosGroup group) {
+    public DefaultSerialProposer(int id, InternalPaxosGroup group) {
         super(group);
-
 
         GroupEnv env = group.env();
         if (env == null) {
@@ -52,13 +51,12 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         }
 
         this.id = id;
-        this.sequencer = sequencer;
+        this.sequencer = group.sequencer();
 
-        this.ctx = new ProposeContext();
-        this.ctx.set(buf);
+        this.ctx = new ProposeContext(buf);
 
         int interval = group.options().retryInterval;
-        this.task = env.executor.scheduleWithFixedDelay(this::process, interval, interval, TimeUnit.MILLISECONDS);
+        // this.task = env.executor.scheduleWithFixedDelay(this::process, interval, interval, TimeUnit.MILLISECONDS);
     }
 
     @Override
@@ -68,7 +66,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
     @Override
     public boolean isBusy() {
-        return ctx.instanceId() != -1;
+        return ctx.instanceId() != Defines.VOID_INSTANCE_ID;
     }
 
     private void fail(List<GenericCommit> commits, CommitResult result) {
@@ -97,10 +95,6 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             return ;
         }
 
-        if (!ctx.currentPhase().isReady()) {
-            throw new IllegalStateException("buggy, current phase is not ready, it's " + ctx.currentPhase().name());
-        }
-
         ctx.setCommits(commits);
         if (isDebug()) {
             logger.trace("set a new commit({}) to proposer({}) of group({})", commits.size(), id, group.id());
@@ -127,7 +121,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         }
 
         if (ctx.currentPhase().isReady()) {
-            if (ctx.value().readableBytes() == 0) {
+            if (ctx.valueCache().isEmpty()) {
                 if (isDebug()) {
                     logger.trace("nothing need to propose for proposer({}) of group({})", id, group.id());
                 }
@@ -339,10 +333,11 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         }
 
         Propose propose = new Propose();
-        propose.setNodeId(group.local().id());
+        propose.setNodeId(ctx.ballot().getNodeId());
         propose.setValue(ctx.value());
         propose.setInstanceId(ctx.instanceId());
         propose.setProposerId(id);
+        propose.setGroupId(group.id());
 
         if (getPhase() == AlgorithmPhase.TWO_PHASE) {
             propose.setSequence(ctx.ballot().getSequence());
@@ -553,14 +548,6 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     private boolean isIgnorable(long instanceId, PaxosPhase phase, Message reply) {
         Objects.requireNonNull(reply, "reply");
 
-        if (ctx.instance() == null) {
-            if (isDebug()) {
-                logger.info("ignore reply({}), can't match a instance associated with it", reply.toString());
-            }
-
-            return true;
-        }
-
         if (instanceId != ctx.instanceId()) {
             if (isDebug()) {
                 logger.info("ignore prepare reply({}), current proposal({})", reply.toString(), ctx.toString());
@@ -630,6 +617,8 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         msg.setInstanceId(ctx.instanceId());
         msg.setNodeId(ctx.ballot().getNodeId());
         msg.setSequence(ctx.ballot().getSequence());
+        msg.setGroupId(group.id());
+        msg.setOp(Opcode.LEARN_VALUE);
 
         ctx.config().broadcast(msg);
     }
@@ -641,11 +630,13 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             value.release();
         }
 
+        /*
         if (task != null) {
             if (!task.isCancelled()) {
                 task.cancel(false);
             }
         }
+        */
     }
 
     @Override

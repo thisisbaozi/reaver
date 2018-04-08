@@ -5,13 +5,11 @@ import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.config.GroupConfigs;
 import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.core.InstanceCache;
+import io.messaginglabs.reaver.core.Sequencer;
 import io.messaginglabs.reaver.dsl.PaxosGroup;
 import io.messaginglabs.reaver.dsl.StateMachine;
 
 public interface InternalPaxosGroup extends PaxosGroup {
-
-
-    void boot();
 
     Node local();
 
@@ -39,4 +37,5 @@ public interface InternalPaxosGroup extends PaxosGroup {
     StateMachine getStateMachine();
 
     GroupContext ctx();
+    Sequencer sequencer();
 }

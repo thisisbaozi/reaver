@@ -4,6 +4,7 @@ import io.messaginglabs.reaver.com.DefaultServerConnector;
 import io.messaginglabs.reaver.com.NettyTransporter;
 import io.messaginglabs.reaver.com.ServerConnector;
 import io.messaginglabs.reaver.com.Transporter;
+import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.dsl.ElectionPolicy;
 import io.messaginglabs.reaver.dsl.PaxosGroup;
@@ -13,6 +14,7 @@ import io.messaginglabs.reaver.dsl.StateMachine;
 import io.messaginglabs.reaver.log.DefaultLogStorage;
 import io.messaginglabs.reaver.log.LogStorage;
 import io.messaginglabs.reaver.utils.AddressUtils;
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.util.ResourceLeakDetector;
@@ -22,7 +24,9 @@ import io.netty.util.internal.PlatformDependent;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.SocketException;
+import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,27 +59,26 @@ public class MultiPaxosBuilder implements PaxosBuilder {
     private boolean debug = false;
     private GroupOptions options = new GroupOptions();
 
-    // com
-    private Node node = new Node();
-
     // storage
     private String path;
 
     // resource
     private ByteBufAllocator allocator;
 
-    private boolean externalTransporter = false;
     private Transporter transporter;
 
     private boolean externalStorage = false;
     private LogStorage storage;
     private ServerConnector connector;
 
+    public MultiPaxosBuilder(int id) {
+        this(id, "default");
+    }
+
     public MultiPaxosBuilder(int id, String name) {
         this.id = id;
         this.prefix = name;
-        this.node.setIp(ADDRESS_RESOLVED_BY_INTERFACE);
-        this.node.setPort(8655);
+        options.node = new Node(ADDRESS_RESOLVED_BY_INTERFACE, 8655);
     }
 
     @Override
@@ -131,13 +134,7 @@ public class MultiPaxosBuilder implements PaxosBuilder {
 
     @Override
     public void setNode(Node node) {
-        this.node = Objects.requireNonNull(node, "current");
-    }
-
-    @Override
-    public void setTransporter(Transporter transporter) {
-        this.transporter = Objects.requireNonNull(transporter, "transporter");
-        this.externalTransporter = true;
+        options.node = node;
     }
 
     @Override
@@ -148,7 +145,13 @@ public class MultiPaxosBuilder implements PaxosBuilder {
             init();
 
             InternalPaxosGroup group = new MultiPaxosGroup(id, stateMachine, initEnv(debug, path), options);
-            // transporter.setConsumer(group::process);
+            transporter.setConsumer(buf -> {
+                // decode to a message
+                Message msg = Message.decode(buf);
+                if (msg != null) {
+                    group.process(msg);
+                }
+            });
 
             /*
              * releases resources if the group is closed
@@ -159,12 +162,10 @@ public class MultiPaxosBuilder implements PaxosBuilder {
     }
 
     private void close(InternalPaxosGroup group) {
-        if (!externalTransporter) {
-            try {
-                transporter.close();
-            } catch (Exception cause) {
-                logger.warn("can't close transporter", cause);
-            }
+        try {
+            transporter.close();
+        } catch (Exception cause) {
+            logger.warn("can't close transporter", cause);
         }
 
         if (!externalStorage) {
@@ -206,10 +207,8 @@ public class MultiPaxosBuilder implements PaxosBuilder {
 
     private void init() throws Exception {
         // com
-        if (transporter != null) {
-            transporter = new NettyTransporter(node.getIp(), node.getPort(), 1, prefix);
-            transporter.init();
-        }
+        transporter = new NettyTransporter(options.node.getIp(), options.node.getPort(), 1, prefix);
+        transporter.init();
 
         // storage
         if (storage == null) {

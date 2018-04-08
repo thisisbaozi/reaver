@@ -56,6 +56,14 @@ public abstract class Message {
         return Type.NORMAL;
     }
 
+    public boolean isPropose() {
+        return op == Opcode.PROPOSE;
+    }
+
+    public boolean isPrepare() {
+        return op == Opcode.PREPARE;
+    }
+
     public boolean isPrepareReply() {
         return op() == Opcode.PREPARE_REPLY;
     }
@@ -102,7 +110,8 @@ public abstract class Message {
         return buf;
     }
 
-    public final void decode(ByteBuf buf) {
+    @SuppressWarnings("all")
+    public static <T extends Message> T decode(ByteBuf buf) {
         Objects.requireNonNull(buf, "buf");
 
         if (buf.readableBytes() < 8) {
@@ -125,10 +134,18 @@ public abstract class Message {
             throw new IllegalStateException("unknown raw message opcode: " + rawOp);
         }
 
-        this.op = op;
-        this.groupId = groupId;
+        Message msg;
+        if (op.isPropose() || op.isPrepare()) {
+            msg = new Propose();
+        } else {
+            throw new IllegalStateException("buggy, unknown operation: " + op.name());
+        }
 
-        decodeBody(buf);
+        msg.setOp(op);
+        msg.setGroupId(groupId);
+        msg.decodeBody(buf);
+
+        return (T)msg;
     }
 
     protected void decodeBody(ByteBuf buf) {

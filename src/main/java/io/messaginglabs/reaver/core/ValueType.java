@@ -27,4 +27,12 @@ public enum ValueType {
         return this == MEMBER_JOIN;
     }
 
+    public boolean isRemoveMember() {
+        return this == REMOVE_MEMBER;
+    }
+
+    public boolean isAppData() {
+        return this == APP_DATA;
+    }
+
 }

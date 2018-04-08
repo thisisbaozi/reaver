@@ -113,7 +113,7 @@ public class PaxosGroupConfigs implements GroupConfigs {
         Server[] servers = new Server[copy.size()];
         for (Node member : copy) {
             Server server;
-            if (member.equals(group.local())) {
+            if (member.id() == group.local().id()) {
                 server = localServer;
             } else {
                 server = group.env().connector.connect(member.getIp(), member.getPort());
@@ -127,7 +127,8 @@ public class PaxosGroupConfigs implements GroupConfigs {
             idx++;
         }
 
-        return new ImmutablePaxosConfig(group.id(), instanceId, beginId, (Member[])copy.toArray(), servers);
+
+        return new ImmutablePaxosConfig(group.id(), instanceId, beginId, copy.toArray(new Member[copy.size()]), servers);
     }
 
     private boolean isUsable(long instanceId, PaxosConfig config) {
