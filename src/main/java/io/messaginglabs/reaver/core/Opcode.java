@@ -39,6 +39,7 @@ public enum Opcode {
         return this == PROPOSE;
     }
 
+
     public static Opcode match(int value) {
         for (Opcode opcode : Opcode.values()) {
             if (opcode.value == value) {

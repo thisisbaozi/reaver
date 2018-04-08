@@ -16,4 +16,8 @@ public enum PaxosPhase {
     public boolean isPrepare() {
         return this == PREPARE;
     }
+
+    public boolean isAccept() {
+        return this == ACCEPT;
+    }
 }

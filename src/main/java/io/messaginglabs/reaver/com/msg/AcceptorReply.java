@@ -11,6 +11,8 @@ public class AcceptorReply extends Message {
     private long nodeId;
     private ByteBuf value;
 
+    private int replySequence;
+
     private long instanceId;
     private long acceptorId;
 
@@ -62,7 +64,32 @@ public class AcceptorReply extends Message {
         this.acceptorId = acceptorId;
     }
 
-    @Override protected int bodySize() {
+    public int getReplySequence() {
+        return replySequence;
+    }
+
+    public void setReplySequence(int replySequence) {
+        this.replySequence = replySequence;
+    }
+
+    @Override
+    protected int bodySize() {
         return 0;
     }
+
+    @Override
+    public String toString() {
+        return "AcceptorReply{" +
+            "op=" + op().name() +
+            ", groupId=" + getGroupId() +
+            ", proposerId=" + proposerId +
+            ", sequence=" + sequence +
+            ", nodeId=" + nodeId +
+            ", value=" + value +
+            ", replySequence=" + replySequence +
+            ", instanceId=" + instanceId +
+            ", acceptorId=" + acceptorId +
+            "} ";
+    }
+
 }

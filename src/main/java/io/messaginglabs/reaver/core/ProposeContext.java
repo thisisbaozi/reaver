@@ -12,14 +12,14 @@ public class ProposeContext {
     private long commit;
 
     /*
-     * begin: when this proposal proposed
+     * begin: when this proposal propose
      * end: when this proposal completed
      */
     private long begin;
     private long end;
 
     /*
-     * times this proposal proposed due to conflicts or other
+     * times this proposal propose due to conflicts or other
      * reasons(e.g: network trouble).
      */
     private int times;
@@ -39,9 +39,12 @@ public class ProposeContext {
     private AlgorithmPhase phase = AlgorithmPhase.TWO_PHASE;
     private ByteBuf tmpValue;
 
-    private final Ballot proposed = new Ballot();
-    private final Ballot maxPromised = new Ballot();
-    private final VotersCounter counter = new VotersCounter();
+    private final Ballot propose = new Ballot();
+    private final Ballot accept = new Ballot();
+    private final Ballot choose = new Ballot();
+    private final Ballot greatestSeen = new Ballot();
+
+    private final BallotsCounter counter = new BallotsCounter();
 
     public ProposeContext(ByteBuf buffer) {
         Objects.requireNonNull(buffer, "buffer");
@@ -127,8 +130,8 @@ public class ProposeContext {
         this.end = 0;
         this.times = 0;
         this.sequence = 0;
-        this.proposed.setNodeId(nodeId);
-        this.proposed.setSequence(0);
+        this.propose.setNodeId(nodeId);
+        this.propose.setSequence(0);
         this.mergeValue();
     }
 
@@ -161,6 +164,10 @@ public class ProposeContext {
         return phase;
     }
 
+    public void setPhase(AlgorithmPhase phase) {
+        this.phase = phase;
+    }
+
     public PaxosConfig config() {
         return config;
     }
@@ -177,7 +184,7 @@ public class ProposeContext {
         this.instanceId = instanceId;
     }
 
-    public VotersCounter counter() {
+    public BallotsCounter counter() {
         return counter;
     }
 
@@ -193,7 +200,7 @@ public class ProposeContext {
     public long delayed() {
         if (begin == 0) {
             /*
-             * nothing proposed
+             * nothing propose
              */
             return -1;
         }
@@ -228,12 +235,32 @@ public class ProposeContext {
         return current;
     }
 
-    public void setLargerSequence(long nodeId, int sequence) {
+    public void setGreatestSeen(long nodeId, int sequence) {
+        if (greatestSeen.compare(sequence, nodeId).isSmaller()) {
+            greatestSeen.setNodeId(nodeId);
+            greatestSeen.setSequence(sequence);
+        }
+    }
 
+    public Ballot getGreatestSeen() {
+        return greatestSeen;
+    }
+
+    public Ballot accept() {
+        return accept;
+    }
+
+    public Ballot choose() {
+        return choose;
+    }
+
+    public void setChooseBallot(Ballot ballot) {
+        choose.setSequence(ballot.getSequence());
+        choose.setNodeId(ballot.getNodeId());
     }
 
     public Ballot ballot() {
-        return proposed;
+        return propose;
     }
 
     public int maxSequence() {

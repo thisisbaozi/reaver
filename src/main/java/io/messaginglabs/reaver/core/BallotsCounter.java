@@ -4,7 +4,7 @@ import io.messaginglabs.reaver.config.PaxosConfig;
 import io.messaginglabs.reaver.dsl.ConfigControl;
 import io.messaginglabs.reaver.utils.AddressUtils;
 
-public class VotersCounter {
+public class BallotsCounter {
 
     private static final int NODES_CAPACITY = (1 << 8) - 1;
 
@@ -143,7 +143,7 @@ public class VotersCounter {
 
     @Override
     public String toString() {
-        return "VotersCounter{" +
+        return "BallotsCounter{" +
             ", nodesAccepted=" + dumpPromised() +
             ", nodesRejected=" + dumpRejected() +
             '}';

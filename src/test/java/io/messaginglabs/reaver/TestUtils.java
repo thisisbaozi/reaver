@@ -2,14 +2,12 @@ package io.messaginglabs.reaver;
 
 import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.core.Ballot;
-import io.messaginglabs.reaver.core.VotersCounter;
+import io.messaginglabs.reaver.core.BallotsCounter;
 import io.messaginglabs.reaver.utils.AddressUtils;
 import io.messaginglabs.reaver.utils.Crc32;
 import io.messaginglabs.reaver.utils.Strings;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
-import io.netty.util.collection.IntObjectHashMap;
-import io.netty.util.collection.IntObjectMap;
 import java.nio.ByteBuffer;
 import org.junit.Assert;
 import org.junit.Test;
@@ -18,7 +16,7 @@ public class TestUtils {
 
     @Test
     public void testVoterCounter() throws Exception {
-        VotersCounter counter = new VotersCounter();
+        BallotsCounter counter = new BallotsCounter();
         Assert.assertEquals(counter.nodesPromised(), 0);
 
         String ip = "128.0.0.1";

@@ -19,6 +19,8 @@ public interface PaxosConfig {
     long begin();
     long instanceId();
 
+    int majority();
+
     void broadcast(Message msg);
 
     boolean isMember(long nodeId);

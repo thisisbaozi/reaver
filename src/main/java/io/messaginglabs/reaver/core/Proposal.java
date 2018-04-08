@@ -17,9 +17,10 @@ public class Proposal extends Ballot {
     @Override
     public String toString() {
         return "Proposal{" +
-            "sequence=" + sequence +
-            ", nodeId=" + nodeId +
-            ", value=" + value.readableBytes() +
+            ", nodeId=" + getNodeId() +
+            ", sequence=" + getSequence() +
+            ", value size=" + value.readableBytes() +
+            ", value ref=" + value.refCnt() +
             '}';
     }
 }

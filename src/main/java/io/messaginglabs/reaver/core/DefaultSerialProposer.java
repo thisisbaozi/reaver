@@ -2,11 +2,8 @@ package io.messaginglabs.reaver.core;
 
 import io.messaginglabs.reaver.com.Server;
 import io.messaginglabs.reaver.com.msg.LearnValue;
-import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.com.msg.AcceptorReply;
-import io.messaginglabs.reaver.com.msg.Prepare;
 import io.messaginglabs.reaver.com.msg.Propose;
-import io.messaginglabs.reaver.config.Member;
 import io.messaginglabs.reaver.config.PaxosConfig;
 import io.messaginglabs.reaver.config.GroupConfigs;
 import io.messaginglabs.reaver.dsl.CommitResult;
@@ -17,8 +14,6 @@ import io.messaginglabs.reaver.utils.AddressUtils;
 import io.netty.buffer.ByteBuf;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -172,13 +167,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
                 );
             }
 
-            if (ctx.isRefused()) {
-                // refused by some one, propose the value based on 3 phases
-                // proposeIn3Phase(ctx);
-            } else {
-                // timeout?
-                // proposeIn2Phase(ctx);
-            }
+            doNextRound();
         }
     }
 
@@ -427,86 +416,55 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     public void process(AcceptorReply reply) {
         if (reply.isPrepareReply() || reply.isEmptyPrepareReply()) {
             processPrepareReply(reply);
-        } else if (reply.isAccepted() || reply.isAcceptRejected()) {
+        } else if (reply.isPromiseAcceptProposal() || reply.isRefuseAcceptProposal()) {
             processAcceptReply(reply);
         }
     }
 
     private void processPrepareReply(AcceptorReply reply) {
-        if (isIgnorable(reply.getInstanceId(), PaxosPhase.PREPARE, reply)) {
+        if (isIgnore(reply.getInstanceId(), PaxosPhase.PREPARE, reply)) {
             return ;
         }
 
-        VotersCounter counter = ctx.counter();
-        if (reply.op() == Opcode.REJECT_PREPARE) {
-            if (isDebug()) {
-                logger.trace(
-                    "acceptor({}) rejected proposer({}/{})'s proposal(sequence={}, instance={}), due to an larger proposal({}/{})",
-                    AddressUtils.toString(reply.getAcceptorId()),
-                    id,
-                    group.id(),
-                    ctx.ballot().getSequence(),
-                    ctx.instanceId(),
-                    reply.getSequence(),
-                    AddressUtils.toString(reply.getNodeId())
-                );
-            }
-
-            counter.countRejected(reply.getAcceptorId());
-
-            // update view
-            ctx.setLargerSequence(reply.getNodeId(), reply.getSequence());
-        } else if (reply.isPrepareReply() || reply.isEmptyPrepareReply()) {
-            if (isDebug()) {
-                logger.trace(
-                    "acceptor({}) accept proposer({}/{})'s proposal(sequence={}, instance={})",
-                    AddressUtils.toString(reply.getAcceptorId()),
-                    id,
-                    group.id(),
-                    ctx.ballot().getSequence(),
-                    ctx.instanceId()
-                );
-            }
-
-            counter.countPromised(reply.getAcceptorId());
-
-            if (reply.isPrepareReply()) {
-                /*
-                 * this acceptor made this reply has acceptor a value, propose
-                 * other's value first if its proposal is greater
-                 */
-                boolean isSmaller = ctx.ballot().compare(reply.getSequence(), reply.getNodeId()).isGreater();
-                if (isSmaller) {
-                    ByteBuf value = reply.getValue();
-                    if (value == null) {
-                        throw new IllegalStateException("buggy, no value");
-                    }
-
-                    ctx.setOtherValue(value);
-
-                    if (isDebug()) {
-                        logger.debug(
-                            "replace value({}) proposed by other({}) first because this proposer's({}/{}) proposal({}) is smaller than other({})",
-                            value.readableBytes(),
-                            AddressUtils.toString(reply.getNodeId()),
-                            id,
-                            group.id(),
-                            ctx.ballot().toString(),
-                            reply.getSequence()
-                        );
-                    }
-                }
-            }
-        } else {
-            throw new IllegalStateException(
-                "unknown op: " + reply.op().name()
-            );
+        if (reply.isRejectPrepare()) {
+            processReject(reply);
+            return ;
         }
 
-        checkPrepareResult(counter);
+        ctx.counter().countPromised(reply.getAcceptorId());
+
+        if (reply.isPrepareReply()) {
+            /*
+             * this acceptor made this reply has acceptor a value, propose
+             * other's value first if its proposal is greater
+             */
+            boolean isSmaller = ctx.ballot().compare(reply.getSequence(), reply.getNodeId()).isGreater();
+            if (isSmaller) {
+                ByteBuf value = reply.getValue();
+                if (value == null) {
+                    throw new IllegalStateException("buggy, no value");
+                }
+
+                ctx.setOtherValue(value);
+
+                if (isDebug()) {
+                    logger.debug(
+                        "replace value({}) proposed by other({}) first because this proposer's({}/{}) proposal({}) is smaller than other({})",
+                        value.readableBytes(),
+                        AddressUtils.toString(reply.getNodeId()),
+                        id,
+                        group.id(),
+                        ctx.ballot().toString(),
+                        reply.getSequence()
+                    );
+                }
+            }
+        }
+
+        proposeIfEnough();
     }
 
-    private void checkPrepareResult(VotersCounter counter) {
+    private void proposeIfEnough() {
         /*
          * three state:
          *
@@ -517,7 +475,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         PaxosConfig config = ctx.config();
         // int majority = ctx.config().majority();
         int majority = 0;
-        if (counter.nodesPromised() >= majority) {
+        if (ctx.counter().nodesPromised() >= majority) {
             if (isDebug()) {
                 logger.trace(
                     "the prepare phase of proposal({}) of proposer({}/{}) is finished, go to the next phase",
@@ -531,9 +489,9 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
             // It's no necessary to process replies for first phase when we get here
             // clear votes.
-            counter.reset();
+            ctx.counter().reset();
             // config.propose(ctx.instanceId(), ctx.proposal());
-        } else if (counter.nodesRejected() >= majority) {
+        } else if (ctx.counter().nodesRejected() >= majority) {
             if (isDebug()) {
                 logger.trace(
                     "the proposal({}) of proposer({}/{}) is rejected, go to the next phase",
@@ -545,70 +503,185 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         }
     }
 
-    private boolean isIgnorable(long instanceId, PaxosPhase phase, Message reply) {
+    private boolean isIgnore(long instanceId, PaxosPhase phase, AcceptorReply reply) {
         Objects.requireNonNull(reply, "reply");
+
+        if (group.role() != PaxosGroup.Role.FORMAL) {
+            return true;
+        }
 
         if (instanceId != ctx.instanceId()) {
             if (isDebug()) {
-                logger.info("ignore prepare reply({}), current proposal({})", reply.toString(), ctx.toString());
+                logger.debug(
+                    "ignore reply({}) from acceptor({}), the proposer cares about instance({}), the replay is for instance({})",
+                    reply.toString(),
+                    AddressUtils.toString(reply.getAcceptorId()),
+                    ctx.instanceId(),
+                    instanceId
+                );
             }
 
             return true;
         }
 
         if (ctx.currentPhase() != phase) {
+            /*
+             * this proposer either starts a new round for the instance or move to
+             * the next phase, so ignores these stale replies.
+             */
             if (isDebug()) {
-                logger.info(
-                    "ctx(instance={}, currentPhase={}) is not in Paxos PREPARE currentPhase, ignore prepare reply({})",
+                logger.debug(
+                    "the proposer({}) of group({}) is in {} phase for instance({}) instead of {}, ignores the stale reply({}) from acceptor({})",
+                    id,
+                    group.id(),
                     ctx.instanceId(),
                     ctx.currentPhase().name(),
+                    phase.name(),
                     reply.toString()
                 );
             }
+
+            return true;
+        }
+
+        int sequence = ctx.ballot().getSequence();
+        if (sequence != reply.getReplySequence()) {
+            // it's a stale reply for previous proposals, ignore it
+            if (isDebug()) {
+                logger.debug(
+                    "the reply({}) from acceptor({}) is for proposal({}), but proposer({}/{}) is proposing with {}, ignores it",
+                    reply.getInstanceId(),
+                    AddressUtils.toString(reply.getAcceptorId()),
+                    reply.getReplySequence(),
+                    id,
+                    group.id(),
+                    sequence
+                );
+            }
+
+            return true;
+        }
+
+        PaxosConfig config = find(instanceId);
+        if (config == null ) {
+            /*
+             * Likely, it's impossible...
+             */
+            throw new IllegalStateException("can't find config for instance: " + instanceId);
+        }
+
+        if (!config.isMember(reply.getAcceptorId())) {
+            if (isDebug()) {
+                logger.debug(
+                    "config({}/{}/{}) doesn't contains the acceptor({}), ignores its reply for instance({})",
+                    config.toString(),
+                    AddressUtils.toString(reply.getAcceptorId()),
+                    ctx.instanceId()
+                );
+            }
+            return true;
+        }
+
+        if (isDebug()) {
+            logger.debug(
+                "proposer({}/{}) starts to process reply({}) from acceptor({})",
+                id,
+                group.id(),
+                reply.toString(),
+                AddressUtils.toString(reply.getAcceptorId())
+            );
         }
 
         return false;
     }
 
     private void processAcceptReply(AcceptorReply reply) {
-        if (isIgnorable(reply.getInstanceId(), PaxosPhase.ACCEPT, reply)) {
+        if (isIgnore(reply.getInstanceId(), PaxosPhase.ACCEPT, reply)) {
             return ;
         }
 
-        // The current made this reply is the member of the config
-
-        VotersCounter counter = ctx.counter();
-        if (reply.isAcceptRejected()) {
-            if (isDebug()) {
-
-            }
-
-            counter.countRejected(reply.getAcceptorId());
-        } else if (reply.isAccepted()) {
-            if (isDebug()) {
-
-            }
+        BallotsCounter counter = ctx.counter();
+        if (reply.isRefuseAcceptProposal()) {
+            processReject(reply);
+        } else if (reply.isPromiseAcceptProposal()) {
             counter.countPromised(reply.getAcceptorId());
-        } else {
-            throw new IllegalStateException(
-                "unknown msg reply type: " + reply.op().name()
-            );
-        }
 
-        checkAcceptPhase(counter);
+            // choose the value if a majority of acceptors in the config has
+            // promised for the proposal this proposer sent.
+            Ballot.CompareResult result = ctx.choose().compare(reply.getSequence(), reply.getNodeId());
+            if (result.isSmaller() || result.isGreater()) {
+                return ;
+            }
+
+            chooseIfEnough(counter);
+        } else {
+            throw new IllegalStateException("buggy, unknown msg reply type: " + reply.op().name());
+        }
     }
 
-    private void checkAcceptPhase(VotersCounter counter) {
-        // int majority = ctx.config().majority();
-        int majority = 0;
-        if (counter.nodesPromised() >= majority) {
-            /*
-             * now, the value in the instance this proposer is proposing
-             * is chosen, commit it.
-             */
-            chooseValue();
-        } else if (counter.nodesRejected() >= majority) {
+    private void processReject(AcceptorReply reply) {
+        ctx.counter().countRejected(reply.getAcceptorId());
 
+        Ballot ballot = ctx.getGreatestSeen();
+        if (isDebug()) {
+            logger.debug(
+                "acceptor({}) rejected({}/{}) proposal({},{},{}) from proposer({}/{}), current greatest seen({},{}), acceptor promised({},{})",
+                AddressUtils.toString(reply.getAcceptorId()),
+                ctx.counter().nodesRejected(),
+                ctx.config().members().length,
+                ctx.ballot().getSequence(),
+                ctx.ballot().getNodeId(),
+                ctx.instanceId(),
+                ballot.getSequence(),
+                ballot.getNodeId(),
+                reply.getSequence(),
+                reply.getNodeId(),
+                id,
+                group.id()
+            );
+        }
+        ctx.setGreatestSeen(reply.getNodeId(), reply.getSequence());
+
+        int majority = ctx.config().majority();
+        int count = ctx.counter().nodesRejected();
+        if (count > majority) {
+            if (isDebug()) {
+                logger.debug(
+                    "a majority of acceptors({}/{}) have rejected proposal({}) from this proposer({}/{})",
+                    majority,
+                    ctx.config().members().length,
+                    ctx.instanceId(),
+                    id,
+                    group.id()
+                );
+            }
+
+            doNextRound();
+        }
+    }
+
+    private void doNextRound() {
+        ctx.counter().reset();
+        ctx.setPhase(AlgorithmPhase.THREE_PHASE);
+        start(ctx);
+    }
+
+    private void chooseIfEnough(BallotsCounter counter) {
+        int majority = ctx.config().majority();
+        int count = counter.nodesPromised();
+        if (count > majority) {
+            if (isDebug()) {
+                logger.debug(
+                    "a majority of acceptors({}) have promised to instance({}) of proposer({}/{})",
+                    majority,
+                    ctx.instanceId(),
+                    id,
+                    group.id()
+                );
+            }
+
+            chooseValue();
+            ctx.setChooseBallot(this.ctx.ballot());
         }
     }
 

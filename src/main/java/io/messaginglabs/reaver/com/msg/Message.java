@@ -64,6 +64,10 @@ public abstract class Message {
         return op == Opcode.PREPARE;
     }
 
+    public boolean isRejectPrepare() {
+        return op == Opcode.REJECT_PREPARE;
+    }
+
     public boolean isPrepareReply() {
         return op() == Opcode.PREPARE_REPLY;
     }
@@ -72,11 +76,11 @@ public abstract class Message {
         return op() == Opcode.PREPARE_EMPTY_REPLY;
     }
 
-    public boolean isAccepted() {
+    public boolean isPromiseAcceptProposal() {
         return op() == Opcode.ACCEPT_REPLY;
     }
 
-    public boolean isAcceptRejected() {
+    public boolean isRefuseAcceptProposal() {
         return op() == Opcode.REJECT_ACCEPT;
     }
 

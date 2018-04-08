@@ -46,6 +46,11 @@ public class ImmutablePaxosConfig implements PaxosConfig {
     }
 
     @Override
+    public int majority() {
+        return members.length / 2;
+    }
+
+    @Override
     public long begin() {
         return beginId;
     }

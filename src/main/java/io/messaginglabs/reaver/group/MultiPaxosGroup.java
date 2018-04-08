@@ -509,9 +509,9 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
 
     private boolean isProposer(Message msg) {
         return msg.isEmptyPrepareReply()
-            || msg.isAcceptRejected()
+            || msg.isRefuseAcceptProposal()
             || msg.isPrepareReply()
-            || msg.isAccepted();
+            || msg.isPromiseAcceptProposal();
     }
 
 

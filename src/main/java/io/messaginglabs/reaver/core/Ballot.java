@@ -4,8 +4,8 @@ import io.messaginglabs.reaver.utils.AddressUtils;
 
 public class Ballot {
 
-    protected int sequence;
-    protected long nodeId;
+    private int sequence;
+    private long nodeId;
 
     public Ballot() {
 
@@ -30,6 +30,10 @@ public class Ballot {
 
     public void setNodeId(long nodeId) {
         this.nodeId = nodeId;
+    }
+
+    public boolean isVoid() {
+        return nodeId == 0 && sequence == 0;
     }
 
     public CompareResult compare(int sequence, long nodeId) {
@@ -88,4 +92,5 @@ public class Ballot {
             ", (" + AddressUtils.toString(nodeId) +
             '}';
     }
+
 }
