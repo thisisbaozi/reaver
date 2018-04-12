@@ -1,7 +1,6 @@
 package io.messaginglabs.reaver.core;
 
 import io.messaginglabs.reaver.config.PaxosConfig;
-import io.messaginglabs.reaver.dsl.ConfigControl;
 import io.messaginglabs.reaver.utils.AddressUtils;
 
 public class BallotsCounter {
@@ -38,7 +37,7 @@ public class BallotsCounter {
 
         if ((bit & ctx) == bit) {
             throw new IllegalStateException(
-                String.format("bit at %d of value(%s) is already marked", idx, Integer.toBinaryString(ctx))
+                String.format("bit at %d of myValue(%s) is already marked", idx, Integer.toBinaryString(ctx))
             );
         }
 
@@ -93,7 +92,7 @@ public class BallotsCounter {
         return dump(nodesRejected);
     }
 
-    public String dumpPromised() {
+    public String dumpAccepted() {
         return dump(nodesPromised);
     }
 
@@ -144,7 +143,7 @@ public class BallotsCounter {
     @Override
     public String toString() {
         return "BallotsCounter{" +
-            ", nodesAccepted=" + dumpPromised() +
+            ", nodesAccepted=" + dumpAccepted() +
             ", nodesRejected=" + dumpRejected() +
             '}';
     }

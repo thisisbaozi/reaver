@@ -85,7 +85,7 @@ public class AcceptorReply extends Message {
             ", proposerId=" + proposerId +
             ", sequence=" + sequence +
             ", nodeId=" + nodeId +
-            ", value=" + value +
+            ", myValue=" + value +
             ", replySequence=" + replySequence +
             ", instanceId=" + instanceId +
             ", acceptorId=" + acceptorId +

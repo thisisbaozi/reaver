@@ -40,7 +40,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
     public ParallelProposer(int cacheCapacity, int maxBatchSize, int parallel, InternalPaxosGroup group) {
         super(group);
         if (cacheCapacity <= 0) {
-            throw new IllegalArgumentException("value cache capacity must greater than 0, but given " + cacheCapacity);
+            throw new IllegalArgumentException("myValue cache capacity must greater than 0, but given " + cacheCapacity);
         }
 
         if (maxBatchSize <= 1024) {
@@ -78,7 +78,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
             return CommitResult.FROZEN_GROUP;
         }
 
-        // wrap value and attachment with a commit
+        // wrap myValue and attachment with a commit
         GenericCommit commit = newCommit(value, attachment);
         return enqueue(commit) ? CommitResult.OK : CommitResult.PROPOSE_THROTTLE;
     }
@@ -281,10 +281,10 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
     }
 
     private GenericCommit newCommit(ByteBuf value, Object attachment) {
-        Objects.requireNonNull(value, "value");
+        Objects.requireNonNull(value, "myValue");
 
         if (value.readableBytes() == 0) {
-            throw new IllegalArgumentException("empty value is not allowed");
+            throw new IllegalArgumentException("empty myValue is not allowed");
         }
 
         return new GenericCommit(value, attachment, CommitType.APP_VALUE);

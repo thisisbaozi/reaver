@@ -28,12 +28,12 @@ public class ValuesApplier implements Applier {
         ByteBuf chosenValue = instance.chosenValue();
         if (chosenValue == null) {
             throw new IllegalArgumentException(
-                String.format("no chosen value in instance(%d) of group(%d)", instance.id(), group.id())
+                String.format("no chosen myValue in instance(%d) of group(%d)", instance.id(), group.id())
             );
         }
         if (chosenValue.refCnt() == 0) {
             throw new IllegalArgumentException(
-                String.format("released value in instance(%d) of group(%d)", instance.id(), group.id())
+                String.format("released myValue in instance(%d) of group(%d)", instance.id(), group.id())
             );
         }
 
@@ -52,7 +52,7 @@ public class ValuesApplier implements Applier {
 
         if (!instances.offer(instance)) {
             throw new IllegalStateException(
-                String.format("can't push new value to queue(%d)", instances.size())
+                String.format("can't push new myValue to queue(%d)", instances.size())
             );
         }
     }
@@ -73,7 +73,7 @@ public class ValuesApplier implements Applier {
     }
 
     public boolean doApply(PaxosInstance instance) {
-        // converts the value to DSL
+        // converts the myValue to DSL
         return false;
     }
 

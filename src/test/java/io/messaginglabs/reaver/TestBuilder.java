@@ -30,7 +30,7 @@ public class TestBuilder {
 
         group.join(null);
 
-        // commit a value
+        // commit a myValue
         ByteBuffer value = MockUtils.makeValue();
         group.commit(value);
 

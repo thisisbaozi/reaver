@@ -18,7 +18,7 @@ public enum Opcode {
 
     // boot
     UNIFIED_BOOT(11),
-    LEARN_VALUE(12),
+    CHOOSE_VALUE(12),
     ;
 
     public final int value;

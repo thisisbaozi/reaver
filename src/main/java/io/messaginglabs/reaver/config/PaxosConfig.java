@@ -14,12 +14,13 @@ public interface PaxosConfig {
      * +-----+------+--------+------+-----+
      *
      * n is the instance to reconfigure
-     * m is the instance this config can be used to reach a agreement on any value.
+     * m is the instance this config can be used to reach a agreement on any myValue.
      */
     long begin();
     long instanceId();
 
     int majority();
+    int total();
 
     void broadcast(Message msg);
 

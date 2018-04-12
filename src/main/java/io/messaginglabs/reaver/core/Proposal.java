@@ -19,8 +19,8 @@ public class Proposal extends Ballot {
         return "Proposal{" +
             ", nodeId=" + getNodeId() +
             ", sequence=" + getSequence() +
-            ", value size=" + value.readableBytes() +
-            ", value ref=" + value.refCnt() +
+            ", myValue size=" + value.readableBytes() +
+            ", myValue ref=" + value.refCnt() +
             '}';
     }
 }

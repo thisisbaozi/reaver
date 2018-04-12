@@ -51,6 +51,11 @@ public class ImmutablePaxosConfig implements PaxosConfig {
     }
 
     @Override
+    public int total() {
+        return members.length;
+    }
+
+    @Override
     public long begin() {
         return beginId;
     }

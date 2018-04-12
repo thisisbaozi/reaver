@@ -23,7 +23,7 @@ public final class Defines {
     /* transport */
 
     /*
-     * the max size of a packet, it means the size of value must be smaller
+     * the max size of a packet, it means the size of myValue must be smaller
      * than this.
      */
     public static final int PACKET_MAX_SIZE = 32 * 1024 * 1024; // 32m

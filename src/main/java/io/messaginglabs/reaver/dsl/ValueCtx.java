@@ -5,7 +5,7 @@ import io.netty.buffer.ByteBuf;
 public interface ValueCtx {
 
     /**
-     * Returns chosen value. As an optimization, the returned value may
+     * Returns chosen myValue. As an optimization, the returned myValue may
      * change after this calling finished, the state machine shouldn't
      * rely on the value.
      *

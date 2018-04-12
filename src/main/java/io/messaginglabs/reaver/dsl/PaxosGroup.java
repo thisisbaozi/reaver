@@ -59,7 +59,7 @@ public interface PaxosGroup {
     Commit commit(ByteBuf value);
 
     /**
-     * Commits a value and attach a optional attachment. the value and attachment
+     * Commits a myValue and attach a optional attachment. the myValue and attachment
      * is applied to the state machine registered to this group once the value was chosen.
      */
     CommitResult commit(ByteBuffer value, Object att);

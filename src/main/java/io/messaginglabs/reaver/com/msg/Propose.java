@@ -10,7 +10,7 @@ public class Propose extends Message {
     private long instanceId;
 
     /*
-     * combined value
+     * combined myValue
      */
     private ByteBuf value;
 

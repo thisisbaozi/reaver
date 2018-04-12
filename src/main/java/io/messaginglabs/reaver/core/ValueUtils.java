@@ -8,11 +8,11 @@ import java.util.Objects;
 public final class ValueUtils {
 
     public static ValueType parse(ByteBuf value) {
-        Objects.requireNonNull(value, "value");
+        Objects.requireNonNull(value, "myValue");
 
         int readable = value.readableBytes();
         if (readable < 8) {
-            throw new IllegalArgumentException(String.format("void value, readable bytes %d", readable));
+            throw new IllegalArgumentException(String.format("void myValue, readable bytes %d", readable));
         }
 
         int header = value.getInt(4);
@@ -20,7 +20,7 @@ public final class ValueUtils {
     }
 
     public static ByteBuf init(ValueType type, ByteBuffer value, ByteBuf buf) {
-        Objects.requireNonNull(type, "type");
+        Objects.requireNonNull(type, "getType");
 
         // checksum
         int checksum = Crc32.get(value);

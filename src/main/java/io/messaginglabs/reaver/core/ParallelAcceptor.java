@@ -42,7 +42,7 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
         reply.setInstanceId(msg.getInstanceId());
         reply.setAcceptorId(group().local().id());
 
-        if (result.isSmaller()) {
+        if (result.isGreater()) {
             reply.setOp(Opcode.REJECT_PREPARE);
         } else {
             // promise do not accept proposals which's id is smaller
@@ -51,8 +51,8 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
             proposal.setNodeId(msg.getNodeId());
 
             if (proposal.getValue() != null) {
-                // this acceptor has acceptor a value, tell the proposer
-                // posted this msg that it should process the value first
+                // this acceptor has acceptor a myValue, tell the proposer
+                // posted this msg that it should process the myValue first
                 reply.setOp(Opcode.PREPARE_REPLY);
                 reply.setValue(proposal.getValue());
             } else {
@@ -113,7 +113,7 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
             logger.debug(
                 "the acceptor(group={}, promised={}) starts to process the message({}/{}/{}:{}/{}) from proposer({})",
                 group.id(),
-                msg.type().name(),
+                msg.getType().name(),
                 msg.getInstanceId(),
                 msg.getNodeId(),
                 msg.getSequence(),
@@ -140,9 +140,9 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
         if (instance.isChosen()) {
             if (isDebug()) {
                 logger.debug(
-                    "the instance({}) has chosen a value, ignore message({}) from proposer({})",
+                    "the instance({}) has chosen a myValue, ignore message({}) from proposer({})",
                     instanceId,
-                    msg.type().name(),
+                    msg.getType().name(),
                     AddressUtils.toString(msg.getNodeId())
                 );
             }
@@ -150,7 +150,7 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
             // the proposer sent this message should learn the chosen instance ASAP
             reply.setInstanceId(instanceId);
             reply.setGroupId(msg.getGroupId());
-            reply.setOp(Opcode.LEARN_VALUE);
+            reply.setOp(Opcode.CHOOSE_VALUE);
             reply.setValue(instance.chosenValue());
             return reply;
         }
@@ -168,9 +168,6 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
     private PaxosInstance get(long instanceId) {
         PaxosInstance instance = cache.get(instanceId);
         if (instance == null) {
-            /*
-             * it's a new instance
-             */
             instance = cache.createIfAbsent(instanceId);
             if (instance == null) {
                 throw new IllegalStateException(

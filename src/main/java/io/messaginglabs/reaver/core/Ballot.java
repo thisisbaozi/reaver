@@ -41,13 +41,25 @@ public class Ballot {
             return CompareResult.EQUAL;
         }
 
-        // greater?
         if (this.sequence > sequence || (this.sequence == sequence && this.nodeId > nodeId)) {
             return CompareResult.GREATER;
         }
 
         return CompareResult.SMALLER;
     }
+
+    public CompareResult compare(Ballot dst) {
+        if (this.sequence == dst.sequence && this.nodeId == dst.nodeId) {
+            return CompareResult.EQUAL;
+        }
+
+        if (this.sequence > dst.sequence || (this.sequence == dst.sequence && this.nodeId > dst.nodeId)) {
+            return CompareResult.GREATER;
+        }
+
+        return CompareResult.SMALLER;
+    }
+
 
     public enum CompareResult {
         EQUAL, GREATER, SMALLER;

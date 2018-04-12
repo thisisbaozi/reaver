@@ -22,8 +22,7 @@ public class PaxosInstance extends AbstractReferenceCounted {
      */
     protected Proposal acceptor = new Proposal();
 
-    // chosen value
-    protected ByteBuf chosen;
+    protected Proposal chosen;
 
     /*
      * -1 means no one holds this instance, otherwise it's the id of
@@ -36,12 +35,12 @@ public class PaxosInstance extends AbstractReferenceCounted {
     }
 
     /**
-     * Returns true if the Paxos instance is done
+     * Returns true if the value of the Paxos instance is chosen.
      *
      * DONE means the members in a specified config have reached a consensus
      * on this instance, the value has been chosen.
      */
-    public boolean isDone() {
+    public boolean hasChosen() {
         return chosen != null;
     }
 
@@ -63,12 +62,15 @@ public class PaxosInstance extends AbstractReferenceCounted {
         return acceptor;
     }
 
-    public ByteBuf chosenValue(){
+    public Proposal chosenValue() {
         return chosen;
     }
 
-    public void choose(ByteBuf value) {
-        this.chosen = value;
+    public void choose(Proposal proposal) {
+        this.chosen = proposal;
+        if (this.acceptor != proposal) {
+            this.acceptor = proposal;
+        }
     }
 
     public int hold(int proposerId) {

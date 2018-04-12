@@ -3,6 +3,7 @@ package io.messaginglabs.reaver.core;
 import io.messaginglabs.reaver.com.Server;
 import io.messaginglabs.reaver.com.msg.LearnValue;
 import io.messaginglabs.reaver.com.msg.AcceptorReply;
+import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.com.msg.Propose;
 import io.messaginglabs.reaver.config.PaxosConfig;
 import io.messaginglabs.reaver.config.GroupConfigs;
@@ -31,6 +32,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
      */
     // private final ScheduledFuture<?> task;
     private final Sequencer sequencer;
+    private final Propose msg;
 
     public DefaultSerialProposer(int id, InternalPaxosGroup group) {
         super(group);
@@ -48,7 +50,10 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         this.id = id;
         this.sequencer = group.sequencer();
 
-        this.ctx = new ProposeContext(buf);
+        this.ctx = new ProposeContext(buf, group.id(), group.local().id());
+        this.msg = new Propose();
+        this.msg.setGroupId(group.id());
+        this.msg.setProposerId(id);
 
         int interval = group.options().retryInterval;
         // this.task = env.executor.scheduleWithFixedDelay(this::process, interval, interval, TimeUnit.MILLISECONDS);
@@ -92,14 +97,14 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
         ctx.setCommits(commits);
         if (isDebug()) {
-            logger.trace("set a new commit({}) to proposer({}) of group({})", commits.size(), id, group.id());
+            logger.trace("set a new commit({}) to proposer({}.{})", commits.size(), group.id(), id);
         }
 
         /*
-         * Now, this proposer will keep to propose a value composed of
+         * Now, this proposer will keep to propose a myValue composed of
          * the given commits until:
          *
-         * 0. the value is chosen.
+         * 0. the myValue is chosen.
          * 1. the group this proposer belongs to is closed(fail commits)
          * 2. there's no a config
          */
@@ -118,7 +123,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         if (ctx.currentPhase().isReady()) {
             if (ctx.valueCache().isEmpty()) {
                 if (isDebug()) {
-                    logger.trace("nothing need to propose for proposer({}) of group({})", id, group.id());
+                    logger.trace("nothing need to msg for proposer({}) of group({})", id, group.id());
                 }
 
                 return ;
@@ -132,11 +137,28 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
                 throw new IllegalStateException("buggy, instance is still void");
             }
 
-            start(ctx);
+            if (isDebug()) {
+                logger.trace(
+                    "starts to propose the myValue in phase({}), instance({}), proposal({}), commits({}), currentPhase({}), config({})",
+                    ctx.phase().name(),
+                    ctx.instanceId(),
+                    ctx.ballot().toString(),
+                    ctx.valueCache().size(),
+                    ctx.currentPhase().name(),
+                    ctx.config().toString()
+                );
+            }
+
+            if (ctx.phase() == AlgorithmPhase.TWO_PHASE) {
+                proposeWithoutPreparing();
+            } else {
+                prepare();
+            }
+
             return ;
         }
 
-        if (ctx.instance().isDone()) {
+        if (ctx.instance().hasChosen()) {
             /*
              * likely, another proposer owns the instance
              */
@@ -152,24 +174,35 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
              *
              * 0. rejected by a number of acceptors
              * 1. network trouble
-             * 2. the value in the instance has been chosen, but it's not the value
+             * 2. the myValue in the instance has been chosen, but it's not the myValue
              *    this proposer proposed
              */
             if (isDebug()) {
                 logger.info(
-                    "propose instance({}) is expired, proposer({}/{}), ratio({}/{}), answered({})",
+                    "msg instance({}) is expired, proposer({}/{}), ratio({}/{}), answered({})",
                     ctx.instanceId(),
                     id,
                     group.id(),
                     "",
                     ctx.config().members().length,
-                    ctx.counter().dumpPromised()
+                    ctx.counter().dumpAccepted()
                 );
             }
 
             doNextRound();
         }
     }
+
+    private void proposeWithoutPreparing() {
+        ctx.acceptCounter().reset();
+
+        ctx.ballot().setNodeId(group.local().id());
+        ctx.ballot().setSequence(0);
+        ctx.setCurrent(0, group.local().id(), ctx.myValue());
+
+        propose();
+    }
+
 
     public PaxosConfig find(long instanceId) {
         inLoop();
@@ -242,7 +275,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         }
 
         sequencer.set(instanceId);
-        ctx.reset(instanceId, config, group.local().id());
+        ctx.reset(instanceId, config);
 
         return true;
     }
@@ -273,7 +306,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         */
 
         /*
-         * ths Paxos instance is done, but the value in this instance may
+         * ths Paxos instance is done, but the myValue in this instance may
          * not be the one this proposer proposed
          */
         if (isDebug()) {
@@ -286,7 +319,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             ctx.clear();
 
             if (isDebug()) {
-                logger.info("the value of proposer({}) of group({}) is chosen, it's ready to propose next one", id, group.id());
+                logger.info("the myValue of proposer({}) of group({}) is chosen, it's ready to msg next one", id, group.id());
             }
 
             return ;
@@ -294,79 +327,9 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
 */
         /*
-         * it's not the value we proposed, try again in a new instance
+         * it's not the myValue we proposed, try again in a new instance
          */
-        // propose();
-    }
-
-    private AlgorithmPhase getPhase() {
-        return ctx.phase();
-    }
-
-    private void start(ProposeContext ctx) {
-        validate(ctx);
-
-        PaxosConfig config = ctx.config();
-        long instanceId = ctx.instanceId();
-
-        if (isDebug()) {
-            logger.trace(
-                "starts to propose the value in phase({}), instance({}), proposal({}), commits({}), currentPhase({}), config({})",
-                ctx.phase().name(),
-                instanceId,
-                ctx.ballot().toString(),
-                ctx.valueCache().size(),
-                ctx.currentPhase().name(),
-                config.toString()
-            );
-        }
-
-        Propose propose = new Propose();
-        propose.setNodeId(ctx.ballot().getNodeId());
-        propose.setValue(ctx.value());
-        propose.setInstanceId(ctx.instanceId());
-        propose.setProposerId(id);
-        propose.setGroupId(group.id());
-
-        if (getPhase() == AlgorithmPhase.TWO_PHASE) {
-            propose.setSequence(ctx.ballot().getSequence());
-            propose.setOp(Opcode.PROPOSE);
-
-            ctx.setStage(PaxosPhase.ACCEPT);
-        } else {
-            propose.setSequence(ctx.maxSequence() + 1);
-            propose.setOp(Opcode.PREPARE);
-
-            ctx.setStage(PaxosPhase.PREPARE);
-        }
-
-        for (Server server : config.servers()) {
-            server.send(propose);
-        }
-    }
-
-
-
-    private void validate(ProposeContext ctx) {
-        Objects.requireNonNull(ctx, "ctx");
-
-        if (ctx.config() == null) {
-            throw new IllegalStateException(
-                String.format("no config in ctx(%s)", ctx.toString())
-            );
-        }
-
-        if (group.local() == null) {
-            throw new IllegalStateException(
-                String.format("buggy, current is null in config(%s)", ctx.config().toString())
-            );
-        }
-
-        if (Defines.isValidInstance(ctx.instanceId())) {
-            throw new IllegalArgumentException(
-                String.format("instance id is -1, invalid ctx(%s)", ctx.toString())
-            );
-        }
+        // msg();
     }
 
     private long acquire() {
@@ -422,7 +385,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     }
 
     private void processPrepareReply(AcceptorReply reply) {
-        if (isIgnore(reply.getInstanceId(), PaxosPhase.PREPARE, reply)) {
+        if (isIgnore(reply.getInstanceId(), reply)) {
             return ;
         }
 
@@ -433,77 +396,87 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
         ctx.counter().countPromised(reply.getAcceptorId());
 
-        if (reply.isPrepareReply()) {
-            /*
-             * this acceptor made this reply has acceptor a value, propose
-             * other's value first if its proposal is greater
-             */
-            boolean isSmaller = ctx.ballot().compare(reply.getSequence(), reply.getNodeId()).isGreater();
-            if (isSmaller) {
-                ByteBuf value = reply.getValue();
-                if (value == null) {
-                    throw new IllegalStateException("buggy, no value");
-                }
+        Proposal current = ctx.current();
+        int sequence = current.getSequence();
+        long nodeId = current.getNodeId();
 
-                ctx.setOtherValue(value);
-
-                if (isDebug()) {
-                    logger.debug(
-                        "replace value({}) proposed by other({}) first because this proposer's({}/{}) proposal({}) is smaller than other({})",
-                        value.readableBytes(),
-                        AddressUtils.toString(reply.getNodeId()),
-                        id,
-                        group.id(),
-                        ctx.ballot().toString(),
-                        reply.getSequence()
-                    );
-                }
-            }
+        boolean newValue = ctx.setCurrent(reply.getSequence(), reply.getNodeId(), reply.getValue());
+        if (newValue && isDebug()) {
+            logger.debug(
+                "proposer({}.{}) seen a newer myValue({}/{}) for instance({}) from acceptor({}), replace old one({}/{})",
+                group.id(),
+                id,
+                reply.getSequence(),
+                reply.getNodeId(),
+                reply.getInstanceId(),
+                AddressUtils.toString(reply.getAcceptorId()),
+                sequence,
+                nodeId
+            );
         }
 
-        proposeIfEnough();
+        if (ctx.ballot().compare(ctx.accept()).isGreater()) {
+            proposeIfEnough();
+        }
     }
 
     private void proposeIfEnough() {
-        /*
-         * three state:
-         *
-         * 0. acceptor(acceptor by a majority of members)
-         * 1. rejected
-         * 2. pending(do nothing)
-         */
-        PaxosConfig config = ctx.config();
-        // int majority = ctx.config().majority();
-        int majority = 0;
-        if (ctx.counter().nodesPromised() >= majority) {
+        int majority = ctx.config().majority();
+        int count = ctx.counter().nodesPromised();
+        if (count > majority) {
             if (isDebug()) {
                 logger.trace(
-                    "the prepare phase of proposal({}) of proposer({}/{}) is finished, go to the next phase",
-                    ctx.ballot().toString(),
-                    id,
-                    group.id()
+                    "acceptors({}/{}) have accepted the prepare proposal({}/{}) of proposer({}.{}, msg it)",
+                    count,
+                    ctx.config().total(),
+                    ctx.current().getSequence(),
+                    ctx.current().getNodeId(),
+                    group.id(),
+                    id
                 );
             }
 
-            ctx.setStage(PaxosPhase.ACCEPT);
+            ctx.acceptCounter().reset();
+            ctx.accept().setSequence(ctx.current().getSequence());
+            ctx.accept().setNodeId(ctx.current().getNodeId());
 
-            // It's no necessary to process replies for first phase when we get here
-            // clear votes.
-            ctx.counter().reset();
-            // config.propose(ctx.instanceId(), ctx.proposal());
-        } else if (ctx.counter().nodesRejected() >= majority) {
-            if (isDebug()) {
-                logger.trace(
-                    "the proposal({}) of proposer({}/{}) is rejected, go to the next phase",
-                    ctx.ballot().toString(),
-                    id,
-                    group.id()
-                );
-            }
+            propose();
         }
     }
 
-    private boolean isIgnore(long instanceId, PaxosPhase phase, AcceptorReply reply) {
+    private void propose() {
+        msg.setSequence(ctx.ballot().getSequence());
+        msg.setNodeId(ctx.ballot().getNodeId());
+        msg.setValue(ctx.current().getValue());
+        msg.setInstanceId(ctx.instanceId());
+        msg.setOp(Opcode.PROPOSE);
+
+        broadcast(msg);
+    }
+
+    private void prepare() {
+        int sequence = ctx.ballot().getSequence();
+        int greatest = ctx.getGreatestSeen().getSequence();
+        if (sequence < greatest) {
+            sequence = greatest;
+            sequence++;
+        }
+
+        msg.setSequence(sequence);
+        msg.setNodeId(ctx.ballot().getNodeId());
+        msg.setValue(ctx.current().getValue());
+        msg.setInstanceId(ctx.instanceId());
+
+        broadcast(msg);
+    }
+
+    private void broadcast(Message msg) {
+        for (Server server : ctx.config().servers()) {
+            server.send(msg);
+        }
+    }
+
+    private boolean isIgnore(long instanceId, AcceptorReply reply) {
         Objects.requireNonNull(reply, "reply");
 
         if (group.role() != PaxosGroup.Role.FORMAL) {
@@ -518,26 +491,6 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
                     AddressUtils.toString(reply.getAcceptorId()),
                     ctx.instanceId(),
                     instanceId
-                );
-            }
-
-            return true;
-        }
-
-        if (ctx.currentPhase() != phase) {
-            /*
-             * this proposer either starts a new round for the instance or move to
-             * the next phase, so ignores these stale replies.
-             */
-            if (isDebug()) {
-                logger.debug(
-                    "the proposer({}) of group({}) is in {} phase for instance({}) instead of {}, ignores the stale reply({}) from acceptor({})",
-                    id,
-                    group.id(),
-                    ctx.instanceId(),
-                    ctx.currentPhase().name(),
-                    phase.name(),
-                    reply.toString()
                 );
             }
 
@@ -596,7 +549,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     }
 
     private void processAcceptReply(AcceptorReply reply) {
-        if (isIgnore(reply.getInstanceId(), PaxosPhase.ACCEPT, reply)) {
+        if (isIgnore(reply.getInstanceId(), reply)) {
             return ;
         }
 
@@ -606,16 +559,31 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         } else if (reply.isPromiseAcceptProposal()) {
             counter.countPromised(reply.getAcceptorId());
 
-            // choose the value if a majority of acceptors in the config has
+            // choose the myValue if a majority of acceptors in the config has
             // promised for the proposal this proposer sent.
             Ballot.CompareResult result = ctx.choose().compare(reply.getSequence(), reply.getNodeId());
             if (result.isSmaller() || result.isGreater()) {
                 return ;
             }
 
-            chooseIfEnough(counter);
+            int majority = ctx.config().majority();
+            int count = counter.nodesPromised();
+            if (count > majority) {
+                if (isDebug()) {
+                    logger.debug(
+                        "a majority of acceptors({}) have promised to instance({}) of proposer({}/{})",
+                        majority,
+                        ctx.instanceId(),
+                        id,
+                        group.id()
+                    );
+                }
+
+                chooseValue();
+                ctx.setChooseBallot(ctx.ballot());
+            }
         } else {
-            throw new IllegalStateException("buggy, unknown msg reply type: " + reply.op().name());
+            throw new IllegalStateException("buggy, unknown op: " + reply.op().name());
         }
     }
 
@@ -663,27 +631,9 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     private void doNextRound() {
         ctx.counter().reset();
         ctx.setPhase(AlgorithmPhase.THREE_PHASE);
-        start(ctx);
     }
 
-    private void chooseIfEnough(BallotsCounter counter) {
-        int majority = ctx.config().majority();
-        int count = counter.nodesPromised();
-        if (count > majority) {
-            if (isDebug()) {
-                logger.debug(
-                    "a majority of acceptors({}) have promised to instance({}) of proposer({}/{})",
-                    majority,
-                    ctx.instanceId(),
-                    id,
-                    group.id()
-                );
-            }
 
-            chooseValue();
-            ctx.setChooseBallot(this.ctx.ballot());
-        }
-    }
 
     private void chooseValue() {
         LearnValue msg = new LearnValue();
@@ -691,14 +641,30 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         msg.setNodeId(ctx.ballot().getNodeId());
         msg.setSequence(ctx.ballot().getSequence());
         msg.setGroupId(group.id());
-        msg.setOp(Opcode.LEARN_VALUE);
+        msg.setOp(Opcode.CHOOSE_VALUE);
 
-        ctx.config().broadcast(msg);
+        ByteBuf value = ctx.current().getValue();
+        if (value == null || value.readableBytes() == 0) {
+            msg.setType(Message.Type.EMPTY_OP);
+        }
+
+        if (isDebug()) {
+            long proposer = ctx.current().getNodeId();
+            logger.debug(
+                "choose value({}) proposed by {} for instance({}), acceptors({})",
+                (value == null ? "empty" : value.readableBytes()),
+                (proposer == group.local().id() ? "local" : AddressUtils.toString(proposer)),
+                ctx.instanceId(),
+                ctx.acceptCounter().dumpAccepted()
+            );
+        }
+
+        broadcast(msg);
     }
 
     @Override
     public void close() {
-        ByteBuf value = ctx.value();
+        ByteBuf value = ctx.myValue();
         if (value != null) {
             value.release();
         }

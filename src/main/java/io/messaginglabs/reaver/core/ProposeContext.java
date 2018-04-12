@@ -1,6 +1,7 @@
 package io.messaginglabs.reaver.core;
 
 import io.messaginglabs.reaver.config.PaxosConfig;
+import io.messaginglabs.reaver.utils.Parameters;
 import io.netty.buffer.ByteBuf;
 import java.util.ArrayList;
 import java.util.List;
@@ -9,6 +10,7 @@ import java.util.Objects;
 public class ProposeContext {
 
     private int groupId;
+    private long nodeId;
     private long commit;
 
     /*
@@ -24,20 +26,25 @@ public class ProposeContext {
      */
     private int times;
 
-    private PaxosPhase stage = PaxosPhase.READY;
+    private PaxosStage stage = PaxosStage.READY;
 
 
     private List<GenericCommit> commits = new ArrayList<>();
-    private ByteBuf buffer;
+    private final ByteBuf buffer;
+
+
+    /*
+     * the myValue and ballot this proposer is proposing with
+     */
+    private Proposal current = new Proposal();
 
     // the id of Paxos instance this proposal associated with
     private long instanceId = Defines.VOID_INSTANCE_ID;
-    private int sequence;
 
     // the instance propose this proposal based on the config
     private PaxosConfig config;
     private AlgorithmPhase phase = AlgorithmPhase.TWO_PHASE;
-    private ByteBuf tmpValue;
+
 
     private final Ballot propose = new Ballot();
     private final Ballot accept = new Ballot();
@@ -45,8 +52,9 @@ public class ProposeContext {
     private final Ballot greatestSeen = new Ballot();
 
     private final BallotsCounter counter = new BallotsCounter();
+    private final BallotsCounter acceptCounter = new BallotsCounter();
 
-    public ProposeContext(ByteBuf buffer) {
+    public ProposeContext(ByteBuf buffer, int groupId, long nodeId) {
         Objects.requireNonNull(buffer, "buffer");
 
         if (buffer.isReadOnly()) {
@@ -54,6 +62,8 @@ public class ProposeContext {
         }
 
         this.buffer = buffer;
+        this.groupId = groupId;
+        this.nodeId = nodeId;
     }
 
     public void setCommits(List<GenericCommit> commits) {
@@ -63,7 +73,7 @@ public class ProposeContext {
             throw new IllegalArgumentException("no commits");
         }
 
-        if (stage != PaxosPhase.READY) {
+        if (stage != PaxosStage.READY) {
             throw new IllegalStateException(
                 String.format("Paxos currentPhase is not ready(%s)", stage.name())
             );
@@ -89,6 +99,7 @@ public class ProposeContext {
         // 2. the number of entries
         this.buffer.writeInt(groupId);
         this.buffer.writeLong(instanceId);
+        this.buffer.writeLong(nodeId);
         this.buffer.writeInt(this.commits.size());
         int size = this.commits.size();
         for (int i = 0; i < size; i++) {
@@ -110,7 +121,7 @@ public class ProposeContext {
         }
     }
 
-    public void reset(long instanceId, PaxosConfig config, long nodeId) {
+    public void reset(long instanceId, PaxosConfig config) {
         if (commits.isEmpty()) {
             throw new IllegalArgumentException(
                 String.format("nothing needs to reach a consensus for instance(%d)", instanceId)
@@ -124,30 +135,46 @@ public class ProposeContext {
             );
         }
 
+        this.mergeValue();
+
         this.instanceId = instanceId;
         this.config = config;
+
         this.begin = System.currentTimeMillis();
         this.end = 0;
         this.times = 0;
-        this.sequence = 0;
-        this.propose.setNodeId(nodeId);
-        this.propose.setSequence(0);
-        this.mergeValue();
     }
 
     public void clear() {
 
     }
 
-    public void setOtherValue(ByteBuf value) {
-        this.tmpValue = value;
+    public boolean setCurrent(int sequence, long nodeId, ByteBuf value) {
+        Ballot.CompareResult result = current.compare(sequence, nodeId);
+        if (result.isSmaller() || current.isVoid()) {
+            /*
+             * the acceptor made this reply has accepted a myValue, this proposer
+             * should resolve the myValue first.
+             */
+            if (current.getValue() != null) {
+                current.getValue().release();
+            }
+
+            current.setValue(Parameters.requireNotEmpty(value));
+            current.setSequence(sequence);
+            current.setNodeId(nodeId);
+
+            return true;
+        }
+
+        return false;
     }
 
     public List<GenericCommit> valueCache() {
         return commits;
     }
 
-    public ByteBuf value() {
+    public ByteBuf myValue() {
         return buffer;
     }
 
@@ -188,7 +215,11 @@ public class ProposeContext {
         return counter;
     }
 
-    public void begin(PaxosPhase stage) {
+    public BallotsCounter acceptCounter() {
+        return acceptCounter;
+    }
+
+    public void begin(PaxosStage stage) {
         this.begin = System.currentTimeMillis();
         this.stage = stage;
     }
@@ -208,14 +239,10 @@ public class ProposeContext {
         return System.currentTimeMillis() - begin;
     }
 
-    public PaxosPhase currentPhase() {
+    public PaxosStage currentPhase() {
         return stage;
     }
 
-
-    public long nodeId() {
-        return 0;
-    }
 
     public String dumpChosenInstance() {
         return null;
@@ -226,10 +253,10 @@ public class ProposeContext {
     }
 
 
-    public PaxosPhase setStage(PaxosPhase stage) {
+    public PaxosStage setStage(PaxosStage stage) {
         Objects.requireNonNull(stage, "currentPhase");
 
-        PaxosPhase current = this.stage;
+        PaxosStage current = this.stage;
         this.stage = current;
 
         return current;
@@ -262,6 +289,12 @@ public class ProposeContext {
     public Ballot ballot() {
         return propose;
     }
+
+    public Proposal current() {
+        return current;
+    }
+
+
 
     public int maxSequence() {
         return 0;

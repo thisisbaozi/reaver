@@ -29,7 +29,7 @@ public class TestUtils {
         Assert.assertEquals(counter.nodesPromised(), 1);
         Assert.assertEquals(counter.nodesRejected(), 0);
 
-        System.out.println(counter.dumpPromised());
+        System.out.println(counter.dumpAccepted());
         System.out.println(counter.dumpRejected());
 
         counter.countPromised(node1.id());
@@ -37,18 +37,18 @@ public class TestUtils {
         Assert.assertEquals(counter.nodesPromised(), 2);
         Assert.assertEquals(counter.nodesRejected(), 0);
 
-        System.out.println(counter.dumpPromised());
+        System.out.println(counter.dumpAccepted());
 
         counter.countRejected(node2.id());
         Assert.assertEquals(counter.nodesPromised(), 2);
         Assert.assertEquals(counter.nodesRejected(), 1);
-        System.out.println(counter.dumpPromised());
+        System.out.println(counter.dumpAccepted());
         System.out.println(counter.dumpRejected());
 
         counter.countPromised(node3.id());
         Assert.assertEquals(counter.nodesPromised(), 3);
         Assert.assertEquals(counter.nodesRejected(), 1);
-        System.out.println(counter.dumpPromised());
+        System.out.println(counter.dumpAccepted());
         System.out.println(counter.dumpRejected());
 
         counter.reset();

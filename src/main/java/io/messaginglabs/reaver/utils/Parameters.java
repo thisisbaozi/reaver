@@ -1,5 +1,6 @@
 package io.messaginglabs.reaver.utils;
 
+import io.netty.buffer.ByteBuf;
 import java.util.Objects;
 
 public final class Parameters {
@@ -32,6 +33,20 @@ public final class Parameters {
         }
 
         return value;
+    }
+
+    public static ByteBuf requireNotEmpty(ByteBuf buf) {
+        Objects.requireNonNull(buf, "buf");
+
+        if (buf.refCnt() == 0) {
+            throw new IllegalArgumentException("released buf");
+        }
+
+        if (buf.readableBytes() == 0) {
+            throw new IllegalArgumentException("empty buf");
+        }
+
+        return buf;
     }
 
 }

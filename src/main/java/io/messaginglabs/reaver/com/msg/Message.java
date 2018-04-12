@@ -17,6 +17,10 @@ public abstract class Message {
         Type(int value) {
             this.value = value;
         }
+
+        public boolean isEmpty() {
+            return this == EMPTY_OP;
+        }
     }
 
     private static Type match(int value) {
@@ -30,6 +34,13 @@ public abstract class Message {
 
     private int groupId;
     private Opcode op;
+
+    /*
+     * by default, it's a normal one, the EMPTY_OP and MULTI_EMPTY_OP are
+     * used to add padding instances so that a new config can take
+     * effect ASAP.
+     */
+    private Type type = Type.NORMAL;
 
     public void setOp(Opcode op) {
         this.op = op;
@@ -47,13 +58,12 @@ public abstract class Message {
         return op;
     }
 
-    public Type type() {
-        /*
-         * by default, it's a normal one, the EMPTY_OP and MULTI_EMPTY_OP are
-         * used to add padding instances so that a new config can take
-         * effect ASAP.
-         */
-        return Type.NORMAL;
+    public void setType(Type type) {
+        this.type = type;
+    }
+
+    public Type getType() {
+        return type;
     }
 
     public boolean isPropose() {
@@ -95,19 +105,19 @@ public abstract class Message {
             throw new IllegalStateException("unknown opcode msg");
         }
 
-        if (type() == null) {
-            throw new IllegalStateException("unknown type msg");
+        if (getType() == null) {
+            throw new IllegalStateException("unknown getType msg");
         }
 
         /*
          * message header:
          *
          * +------------------+---------------+-----------------+
-         * | group id(4 bytes)| type(2 bytes) | opcode(2 bytes) |
+         * | group id(4 bytes)| getType(2 bytes) | opcode(2 bytes) |
          * +------------------+---------------+-----------------+
          */
         buf.writeInt(groupId);
-        buf.writeShort(type().value);
+        buf.writeShort(getType().value);
         buf.writeShort(op.value);
 
         encodeBody(buf);
@@ -129,7 +139,7 @@ public abstract class Message {
         int rawType = buf.readShort();
         Type type = match(rawType);
         if (type == null) {
-            throw new IllegalStateException("unknown raw message type: " + rawType);
+            throw new IllegalStateException("unknown raw message getType: " + rawType);
         }
 
         int rawOp = buf.readShort();
