@@ -5,7 +5,8 @@ public enum ValueType {
     UNKNOWN(0),
     APP_DATA(1),
     MEMBER_JOIN(2),
-    REMOVE_MEMBER(3),
+    MEMBER_LEAVE(3),
+
     ;
 
     public final int idx;
@@ -23,12 +24,12 @@ public enum ValueType {
         return types[idx];
     }
 
-    public boolean isMemberJoin() {
+    public boolean isJoin() {
         return this == MEMBER_JOIN;
     }
 
-    public boolean isRemoveMember() {
-        return this == REMOVE_MEMBER;
+    public boolean isLeave() {
+        return this == MEMBER_LEAVE;
     }
 
     public boolean isAppData() {

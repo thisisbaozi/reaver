@@ -150,8 +150,8 @@ public class ParallelAcceptor extends AlgorithmParticipant implements Acceptor {
             // the proposer sent this message should learn the chosen instance ASAP
             reply.setInstanceId(instanceId);
             reply.setGroupId(msg.getGroupId());
-            reply.setOp(Opcode.CHOOSE_VALUE);
-            reply.setValue(instance.chosenValue());
+            reply.setOp(Opcode.LEARN_CHOSEN_VALUE);
+            //reply.setValue(instance.chosen());
             return reply;
         }
 

@@ -52,7 +52,7 @@ public interface PaxosGroup {
     ByteBuf newBuffer(int capacity);
 
     /**
-     * Commits a value, the commit handle is used to know the result in asynchronous
+     * Commits a value, the learn handle is used to know the result in asynchronous
      * way(By invoking {@link Commit#addListener(Consumer)}).
      */
     Commit commit(ByteBuffer value);

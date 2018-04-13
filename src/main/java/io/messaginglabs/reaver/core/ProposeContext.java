@@ -248,20 +248,6 @@ public class ProposeContext {
         return null;
     }
 
-    public boolean isRefused() {
-        return false;
-    }
-
-
-    public PaxosStage setStage(PaxosStage stage) {
-        Objects.requireNonNull(stage, "currentPhase");
-
-        PaxosStage current = this.stage;
-        this.stage = current;
-
-        return current;
-    }
-
     public void setGreatestSeen(long nodeId, int sequence) {
         if (greatestSeen.compare(sequence, nodeId).isSmaller()) {
             greatestSeen.setNodeId(nodeId);

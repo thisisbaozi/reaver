@@ -1,10 +1,12 @@
 package io.messaginglabs.reaver.core;
 
-import io.netty.buffer.ByteBuf;
+import java.util.function.Consumer;
 
 public interface Applier extends AutoCloseable {
 
+    void addExceptionListener(Consumer<Throwable> consumer);
 
-    void apply(PaxosInstance instance);
+    void start() throws Exception;
+    void add(PaxosInstance instance);
 
 }

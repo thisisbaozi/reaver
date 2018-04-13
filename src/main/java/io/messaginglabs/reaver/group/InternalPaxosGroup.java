@@ -1,6 +1,5 @@
 package io.messaginglabs.reaver.group;
 
-import io.messaginglabs.reaver.com.Server;
 import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.config.GroupConfigs;
 import io.messaginglabs.reaver.config.Node;

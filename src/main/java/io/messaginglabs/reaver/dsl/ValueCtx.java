@@ -15,7 +15,7 @@ public interface ValueCtx {
     ByteBuf value();
 
     /**
-     * Returns the attachment specified while commit the value, it could be null.
+     * Returns the attachment specified while learn the value, it could be null.
      */
     Object attachment();
 

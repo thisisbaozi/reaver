@@ -1,7 +1,7 @@
 package io.messaginglabs.reaver.core;
 
 import io.messaginglabs.reaver.com.Server;
-import io.messaginglabs.reaver.com.msg.LearnValue;
+import io.messaginglabs.reaver.com.msg.CommitValue;
 import io.messaginglabs.reaver.com.msg.AcceptorReply;
 import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.com.msg.Propose;
@@ -74,7 +74,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             if (commit.isDone() || commit.isCancelled()) {
                 // a bug?
                 throw new IllegalStateException(
-                    "commit should be pending, but it's done or cancelled"
+                    "learn should be pending, but it's done or cancelled"
                 );
             }
 
@@ -97,7 +97,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
         ctx.setCommits(commits);
         if (isDebug()) {
-            logger.trace("set a new commit({}) to proposer({}.{})", commits.size(), group.id(), id);
+            logger.trace("set a new learn({}) to proposer({}.{})", commits.size(), group.id(), id);
         }
 
         /*
@@ -636,12 +636,12 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
 
     private void chooseValue() {
-        LearnValue msg = new LearnValue();
+        CommitValue msg = new CommitValue();
         msg.setInstanceId(ctx.instanceId());
         msg.setNodeId(ctx.ballot().getNodeId());
         msg.setSequence(ctx.ballot().getSequence());
         msg.setGroupId(group.id());
-        msg.setOp(Opcode.CHOOSE_VALUE);
+        msg.setOp(Opcode.COMMIT);
 
         ByteBuf value = ctx.current().getValue();
         if (value == null || value.readableBytes() == 0) {

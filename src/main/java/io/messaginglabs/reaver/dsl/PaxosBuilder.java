@@ -1,9 +1,7 @@
 package io.messaginglabs.reaver.dsl;
 
-import io.messaginglabs.reaver.com.Transporter;
 import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.log.LogStorage;
-import java.util.List;
 
 public interface PaxosBuilder {
 

@@ -1,8 +1,8 @@
 package io.messaginglabs.reaver.core;
 
-import io.netty.buffer.ByteBuf;
 import io.netty.util.AbstractReferenceCounted;
 import io.netty.util.ReferenceCounted;
+import java.util.List;
 
 public class PaxosInstance extends AbstractReferenceCounted {
 
@@ -23,6 +23,7 @@ public class PaxosInstance extends AbstractReferenceCounted {
     protected Proposal acceptor = new Proposal();
 
     protected Proposal chosen;
+    protected List<GenericCommit> commits;
 
     /*
      * -1 means no one holds this instance, otherwise it's the id of
@@ -62,7 +63,7 @@ public class PaxosInstance extends AbstractReferenceCounted {
         return acceptor;
     }
 
-    public Proposal chosenValue() {
+    public Proposal chosen() {
         return chosen;
     }
 
@@ -84,5 +85,9 @@ public class PaxosInstance extends AbstractReferenceCounted {
 
     public boolean isChosen() {
         return chosen != null;
+    }
+
+    public List<GenericCommit> commits() {
+        return commits;
     }
 }

@@ -1,7 +1,14 @@
 package io.messaginglabs.reaver;
 
 import io.messaginglabs.reaver.config.Member;
+import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.core.Defines;
+import io.messaginglabs.reaver.dsl.PaxosBuilder;
+import io.messaginglabs.reaver.dsl.PaxosGroup;
+import io.messaginglabs.reaver.dsl.StateMachine;
+import io.messaginglabs.reaver.group.InternalPaxosGroup;
+import io.messaginglabs.reaver.group.MultiPaxosBuilder;
+import io.messaginglabs.reaver.utils.AddressUtils;
 import io.messaginglabs.reaver.utils.Strings;
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -26,6 +33,19 @@ class MockUtils {
         buf0.put(bytes);
         buf0.flip();
         return buf0;
+    }
+
+    public static InternalPaxosGroup newGroup(int port) throws Exception {
+        String ip = AddressUtils.resolveIpV4().getHostAddress();
+        PaxosBuilder builder = new MultiPaxosBuilder(1);
+        builder.setBatchSize(1024 * 1024 * 128);
+        builder.setPipeline(4);
+        builder.setDir("/tmp/reaver/");
+        builder.setNode(new Node(ip, port));
+        builder.setLeaderProposeOnly(false);
+        builder.setValueCacheCapacity(1024 * 1024 * 256);
+        StateMachine sm = new EmptyStateMachine();
+        return (InternalPaxosGroup)builder.build(sm);
     }
 
 }

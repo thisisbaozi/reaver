@@ -2,7 +2,7 @@ package io.messaginglabs.reaver.group;
 
 import io.messaginglabs.reaver.com.Server;
 import io.messaginglabs.reaver.com.msg.AcceptorReply;
-import io.messaginglabs.reaver.com.msg.LearnValue;
+import io.messaginglabs.reaver.com.msg.CommitValue;
 import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.com.msg.Propose;
 import io.messaginglabs.reaver.com.msg.Reconfigure;
@@ -31,7 +31,6 @@ import io.messaginglabs.reaver.core.Proposer;
 import io.messaginglabs.reaver.core.Sequencer;
 import io.messaginglabs.reaver.core.Value;
 import io.messaginglabs.reaver.core.ValueType;
-import io.messaginglabs.reaver.core.ValueUtils;
 import io.messaginglabs.reaver.dsl.Commit;
 import io.messaginglabs.reaver.dsl.CommitResult;
 import io.messaginglabs.reaver.dsl.PaxosGroup;
@@ -43,6 +42,7 @@ import io.netty.buffer.ByteBuf;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Future;
@@ -137,7 +137,7 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
 
             if (configs.size() == 0) {
                 /*
-                 * either this node is the first one or it joins the group by
+                 * either this node is the first one or it joins the group through
                  * the given seed nodes.
                  */
                 if (isBoot(members)) {
@@ -287,6 +287,7 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
             Reconfigure reconfigure = new Reconfigure();
             reconfigure.setOp(Opcode.JOIN_GROUP);
             reconfigure.setMembers(ContainerUtils.toList(current()));
+            reconfigure.setGroupId(id);
             server.send(reconfigure, timeout);
 
             return true;
@@ -360,7 +361,7 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
 
         if (proposer == null) {
             throw new IllegalStateException(
-                String.format("group(%d/%s) is unable to commit myValue", id, role.name())
+                String.format("group(%d/%s) is unable to learn myValue", id, role.name())
             );
         }
     }
@@ -377,18 +378,18 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
     }
 
     private ByteBuf check(ByteBuf value) {
-        Objects.requireNonNull(value, "myValue");
+        Objects.requireNonNull(value, "value");
 
         if (value.alloc() != env.allocator) {
-            throw new IllegalArgumentException(String.format("the ByteBuf is not allocated by group(%d)", id));
+            throw new IllegalArgumentException(String.format("the ByteBuf is not allocated by the allocator of the group(%d)", id));
         }
 
         if (value.readableBytes() <= Value.HEADER_SIZE) {
-            throw new IllegalArgumentException("empty myValue is not allowed");
+            throw new IllegalArgumentException("empty value is not allowed");
         }
 
         // write checksum/size/getType
-        ValueUtils.init(ValueType.APP_DATA, value);
+        Value.init(ValueType.APP_DATA, value);
 
         return value;
     }
@@ -407,7 +408,7 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
 
     private void checkValueSize(int size) {
         if (size <= 0) {
-            throw new IllegalArgumentException("can't commit empty myValue");
+            throw new IllegalArgumentException("can't learn empty myValue");
         }
 
         int max = Value.MAX_SIZE;
@@ -419,9 +420,13 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
     }
 
     private ByteBuf wrapValue(ByteBuffer value) {
+        return wrapValue(value, ValueType.APP_DATA);
+    }
+
+    private ByteBuf wrapValue(ByteBuffer value, ValueType type) {
         checkValueSize(value.remaining());
         ByteBuf buf = env.allocator.buffer(value.remaining() + Value.HEADER_SIZE);
-        return ValueUtils.init(ValueType.APP_DATA, value, buf);
+        return Value.init(type, value, buf);
     }
 
     @Override
@@ -515,21 +520,20 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
             || msg.isPromiseAcceptProposal();
     }
 
-
-    private void reply(long from, PaxosConfig config, AcceptorReply reply) {
+    private void reply(long nodeId, PaxosConfig config, AcceptorReply reply) {
         Objects.requireNonNull(reply, "reply");
 
         /*
          * process the reply directly if the proposer is local
          */
-        if (isLocal(from)) {
+        if (isLocal(nodeId)) {
             process(reply);
         } else {
             /*
              * either this proposer is a member of the config, or it's a independent
              * node.
              */
-            Server server = config.find(from);
+            Server server = config.find(nodeId);
             if (server != null) {
                 server.send(reply);
             } else {
@@ -542,7 +546,6 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
         return local().id() == nodeId;
     }
 
-
     private boolean isAcceptor(Message msg) {
         return msg.isPrepare() || msg.isPropose();
     }
@@ -552,30 +555,26 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
     }
 
     private boolean isLearner(Message msg) {
-        return msg.op() == Opcode.CHOOSE_VALUE;
+        return msg.op() == Opcode.COMMIT
+            || msg.op().isLearnChosenValue();
     }
 
     private void processLearner(Message msg) {
-        if (msg.op() == Opcode.CHOOSE_VALUE) {
-            choose((LearnValue)msg);
+        if (msg.op() == Opcode.COMMIT) {
+            choose((CommitValue)msg);
         }
     }
 
-    private void choose(LearnValue msg) {
+    private void choose(CommitValue msg) {
         long instanceId = msg.getInstanceId();
 
         if (env.debug) {
             logger.debug(
-                "starts to choose the value({}/{}/{}) of instance({})",
-                msg.getType().name(),
+                "starts to choose the value({}/{}) of instance({})",
                 msg.getSequence(),
                 AddressUtils.toString(msg.getNodeId()),
                 instanceId
             );
-        }
-
-        if (msg.getType().isEmpty()) {
-
         }
 
         PaxosInstance instance = cache.get(msg.getInstanceId());
@@ -612,21 +611,26 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
     }
 
     private void learnChosenValue(long instanceId) {
-        
+
     }
 
     private void learnValue(PaxosInstance instance, Proposal proposal) {
-        if (!instance.hasChosen()) {
+        if (env.debug) {
+
+        }
+
+        if (instance.hasChosen()) {
+            if (env.debug) {
+
+            }
+        } else {
             instance.choose(proposal);
         }
 
-        processChosenValues();
+        applyResolvedInstances();
     }
 
     private long executeCheckpoint = 1;
-    private long applyCheckpoint = 0;
-    private List<PaxosInstance> chosen = new ArrayList<>();
-    private List<PaxosInstance> batch = new ArrayList<>();
 
     private PaxosInstance getSequentialChosenInstances(long instanceId) {
         PaxosInstance instance = cache.get(instanceId);
@@ -639,13 +643,13 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
         return null;
     }
 
-    private void processChosenValues() {
+    private void applyResolvedInstances() {
         PaxosInstance instance = getSequentialChosenInstances(executeCheckpoint);
         if (instance == null) {
             return ;
         }
 
-        Proposal chosen = instance.chosenValue();
+        Proposal chosen = instance.chosen();
         if (chosen == null) {
             throw new IllegalStateException("buggy, no chosen myValue");
         }
@@ -664,15 +668,15 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
     }
 
     public boolean isReconfigure(ValueType type) {
-        return type.isMemberJoin() || type.isRemoveMember();
+        return type.isJoin() || type.isLeave();
     }
 
     private ValueType parseType(ByteBuf chosenValue) {
-        int offset = 16;    // skip Pxaos properties
+        int offset = 24;    // skip Pxaos properties
         offset += 4;        // skip checksum
 
         int header = chosenValue.getInt(chosenValue.readerIndex() + offset);
-        ValueType type = ValueUtils.parse(header);
+        ValueType type = Value.parse(header);
         if (type == null) {
             throw new IllegalStateException(
                 String.format("buggy, can't parse the getType of myValue from header(%d)", header)
@@ -686,29 +690,54 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
         // the instance id must greater than current config
         PaxosConfig config = configs.current();
         if (instance.id() <= config.instanceId()) {
-            logger.warn("ignore reconfiguration, its instance id({}) should be greater than current config({})", instance.id(), config.instanceId());
+            if (logger.isWarnEnabled()) {
+                logger.warn(
+                    "ignore reconfiguration({}), the instance id should be greater than current config({})",
+                    instance.id(),
+                    config.instanceId()
+                );
+            }
             return ;
         }
 
-        reconfigure(instance);
+        reconfigure(type, instance);
     }
 
-    private void reconfigure(PaxosInstance instance) {
+    private void reconfigure(ValueType type, PaxosInstance instance) {
         /*
          * 0. apply new configuration
          * 1. clear useless configurations
          */
+        Proposal proposal = instance.chosen();
+        if (proposal == null) {
+            throw new IllegalStateException(String.format("no chosen proposal in instance(%d)", instance.id()));
+        }
+
+        if (type.isJoin()) {
+            ByteBuf value = instance.chosen().getValue();
+            value.readerIndex(value.readerIndex() + 28 + 4);
+            Reconfigure reconfigure = Message.decode(value);
+
+            Member[] active = configs.current().members();
+            List<Member> members = new ArrayList<>(active.length + 1);
+            members.add(reconfigure.getMembers().get(0));
+            Collections.addAll(members, active);
+
+            long instanceId = instance.id();
+            long beginId = getBeginId(instanceId);
+
+            applyConfig(configs.build(instanceId, beginId, members));
+        }
+    }
+
+    private long getBeginId(long instanceId) {
+        return instanceId + options.pipeline;
     }
 
     private void applyValue(ValueType type, PaxosInstance instance) {
         if (isAppData(type)) {
-            applier.apply(instance);
+            applier.add(instance);
         }
-    }
-
-    private boolean hasLearned(PaxosInstance instance) {
-
-        return false;
     }
 
     private void processConfig(Reconfigure msg) {
@@ -739,7 +768,7 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
 
         ByteBuf buf = msg.encode(env.allocator.buffer(1024));
         try {
-            commit(buf.nioBuffer(), null);
+            proposer.commit(wrapValue(buf.nioBuffer(), ValueType.MEMBER_JOIN));
         } finally {
             buf.release();
         }
@@ -808,9 +837,6 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
         }
 
         env.connector.release();
-
-        // disconnect connections connected with other servers
-
         env.storage.release();
         env.transporter.release();
 
@@ -835,9 +861,6 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
         if (acceptor != null) {
             close(acceptor, String.format("acceptor of group(%d)", id));
         }
-
-        close(learner, String.format("leaner of group(%d)", id));
-        close(applier, String.format("applier of group(%d)", id));
     }
 
     private void close(AutoCloseable src, String id) throws Exception {

@@ -10,7 +10,6 @@ public enum Opcode {
     ACCEPT_REPLY(6),
     REJECT_ACCEPT(7),
 
-
     // config
     JOIN_GROUP(8),
     REMOVE_NODE(9),
@@ -18,7 +17,8 @@ public enum Opcode {
 
     // boot
     UNIFIED_BOOT(11),
-    CHOOSE_VALUE(12),
+    COMMIT(12),
+    LEARN_CHOSEN_VALUE(13),
     ;
 
     public final int value;
@@ -29,6 +29,10 @@ public enum Opcode {
 
     public boolean isJoinGroup() {
         return this == JOIN_GROUP;
+    }
+
+    public boolean isLearnChosenValue() {
+        return this == LEARN_CHOSEN_VALUE;
     }
 
     public boolean isPrepare() {

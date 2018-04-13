@@ -2,7 +2,7 @@ package io.messaginglabs.reaver.com.msg;
 
 import io.netty.buffer.ByteBuf;
 
-public class LearnValue extends Message {
+public class CommitValue extends Message {
 
     // proposal
     private int sequence;

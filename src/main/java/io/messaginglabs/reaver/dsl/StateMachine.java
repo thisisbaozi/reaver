@@ -12,7 +12,7 @@ public interface StateMachine {
     void apply(Iterator<ChosenValues> instances);
 
     /**
-     * Failed to propose the commit
+     * Failed to propose the learn
      */
     void process(CommitResult cause, ValueCtx value);
 

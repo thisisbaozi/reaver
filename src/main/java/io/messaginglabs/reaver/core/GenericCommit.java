@@ -18,7 +18,6 @@ public class GenericCommit extends ArrayList<GenericCommit.Pair> implements Comm
 
     private final ByteBuf value;
     private final Object attachment;
-    private final CommitType type;
 
     private int waiters;
     private long begin;
@@ -37,10 +36,9 @@ public class GenericCommit extends ArrayList<GenericCommit.Pair> implements Comm
         }
     }
 
-    public GenericCommit(ByteBuf value, Object attachment, CommitType type) {
+    public GenericCommit(ByteBuf value, Object attachment) {
         this.value = value;
         this.attachment = attachment;
-        this.type = type;
         this.waiters = 0;
         this.begin = System.currentTimeMillis();
         this.done = -1;
@@ -53,16 +51,16 @@ public class GenericCommit extends ArrayList<GenericCommit.Pair> implements Comm
         return stage;
     }
 
-    public CommitType type() {
-        return type;
-    }
-
     public int valueSize() {
         return value.readableBytes();
     }
 
     public ByteBuf value() {
         return value;
+    }
+
+    public ValueType valueType() {
+        return Value.parse(value);
     }
 
     @Override
@@ -258,7 +256,6 @@ public class GenericCommit extends ArrayList<GenericCommit.Pair> implements Comm
     @Override
     public String toString() {
         return "GenericCommit{" +
-            ", getType=" + type +
             ", waiters=" + waiters +
             ", begin=" + begin +
             ", done=" + done +

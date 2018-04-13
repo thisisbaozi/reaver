@@ -1,8 +1,8 @@
 package io.messaginglabs.reaver.core;
 
-import io.messaginglabs.reaver.com.msg.Message;
+import io.messaginglabs.reaver.com.msg.CommitValue;
 
-public interface Learner extends AutoCloseable {
+public interface Learner {
 
     /**
      * Returns the max instance id this learner has learned
@@ -17,6 +17,6 @@ public interface Learner extends AutoCloseable {
      */
     long instanceId();
 
-    void process(Message msg);
+    void learn(CommitValue value);
 
 }

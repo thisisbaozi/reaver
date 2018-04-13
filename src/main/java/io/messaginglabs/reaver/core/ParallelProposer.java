@@ -78,7 +78,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
             return CommitResult.FROZEN_GROUP;
         }
 
-        // wrap myValue and attachment with a commit
+        // wrap myValue and attachment with a learn
         GenericCommit commit = newCommit(value, attachment);
         return enqueue(commit) ? CommitResult.OK : CommitResult.PROPOSE_THROTTLE;
     }
@@ -214,7 +214,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
 
             if (!commit.setStage(Commit.Stage.PROPOSED)) {
                 if (!commit.isCancelled()) {
-                    throw new IllegalStateException(String.format("commit(%s) is not cancelled", commit.toString()));
+                    throw new IllegalStateException(String.format("learn(%s) is not cancelled", commit.toString()));
                 }
 
                 continue;
@@ -247,20 +247,20 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
         /*
          * There's only ValueCtx op can be proposed in batch.
          */
-        return commit.type() == CommitType.APP_VALUE;
+        return commit.valueType().isAppData();
     }
 
     private boolean isIgnore(GenericCommit commit) {
         if (commit.isCancelled()) {
             /*
-             * ignore it if a commit has been cancelled
+             * ignore it if a learn has been cancelled
              */
-            logger.debug("a commit({}) posted to group({}) is cancelled, ignore it", commit.toString(), group().id());
+            logger.debug("a learn({}) posted to group({}) is cancelled, ignore it", commit.toString(), group().id());
             return true;
         }
 
         if (commit.isDone()) {
-            logger.debug("a commit({}) posted to group({}) is done, ignore it", commit.toString(), group().id());
+            logger.debug("a learn({}) posted to group({}) is done, ignore it", commit.toString(), group().id());
             return true;
         }
 
@@ -287,7 +287,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
             throw new IllegalArgumentException("empty myValue is not allowed");
         }
 
-        return new GenericCommit(value, attachment, CommitType.APP_VALUE);
+        return new GenericCommit(value, attachment);
     }
 
     public void process(Message msg) {
