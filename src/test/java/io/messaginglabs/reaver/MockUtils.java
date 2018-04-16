@@ -10,6 +10,8 @@ import io.messaginglabs.reaver.group.InternalPaxosGroup;
 import io.messaginglabs.reaver.group.MultiPaxosBuilder;
 import io.messaginglabs.reaver.utils.AddressUtils;
 import io.messaginglabs.reaver.utils.Strings;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import java.nio.ByteBuffer;
 import java.util.List;
 
@@ -35,6 +37,14 @@ class MockUtils {
         return buf0;
     }
 
+    static ByteBuf makeValue(String str) {
+        ByteBufAllocator allocator = ByteBufAllocator.DEFAULT;
+        byte[] bytes = Strings.UTF8Bytes(str);
+        ByteBuf buf = allocator.buffer(bytes.length);
+        buf.writeBytes(bytes);
+        return buf;
+    }
+
     public static InternalPaxosGroup newGroup(int port) throws Exception {
         String ip = AddressUtils.resolveIpV4().getHostAddress();
         PaxosBuilder builder = new MultiPaxosBuilder(1);
@@ -48,4 +58,13 @@ class MockUtils {
         return (InternalPaxosGroup)builder.build(sm);
     }
 
+
+    public static Node local(int port) throws Exception {
+        String ip = AddressUtils.resolveIpV4().getHostAddress();
+        return new Node(ip, port);
+    }
+
+    public static long localNodeId(int port) throws Exception {
+        return local(port).id();
+    }
 }

@@ -4,17 +4,16 @@ import io.messaginglabs.reaver.com.Server;
 import io.messaginglabs.reaver.com.msg.CommitValue;
 import io.messaginglabs.reaver.com.msg.AcceptorReply;
 import io.messaginglabs.reaver.com.msg.Message;
-import io.messaginglabs.reaver.com.msg.Propose;
+import io.messaginglabs.reaver.com.msg.Proposing;
 import io.messaginglabs.reaver.config.PaxosConfig;
 import io.messaginglabs.reaver.config.GroupConfigs;
 import io.messaginglabs.reaver.dsl.CommitResult;
-import io.messaginglabs.reaver.dsl.PaxosGroup;
-import io.messaginglabs.reaver.group.GroupEnv;
-import io.messaginglabs.reaver.group.InternalPaxosGroup;
 import io.messaginglabs.reaver.utils.AddressUtils;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,7 +22,10 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
     private static final Logger logger = LoggerFactory.getLogger(DefaultSerialProposer.class);
 
+    private final int groupId;
     private final int id;
+    private final int timeout;
+    private final long localId;
     private final ProposeContext ctx;
 
     /*
@@ -32,31 +34,39 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
      */
     // private final ScheduledFuture<?> task;
     private final Sequencer sequencer;
-    private final Propose msg;
+    private final InstanceCache cache;
+    private final GroupConfigs configs;
+    private final ScheduledExecutorService executor;
+    private final Proposing msg;
+    private Limiter limiter;
 
-    public DefaultSerialProposer(int id, InternalPaxosGroup group) {
-        super(group);
-
-        GroupEnv env = group.env();
-        if (env == null) {
-            throw new IllegalArgumentException("no group env");
-        }
-
-        ByteBuf buf = env.allocator.buffer(1024 * 4);
+    public DefaultSerialProposer(int groupId, int id, int timeout, long localId, InstanceCache cache, Sequencer sequencer, GroupConfigs configs, ByteBufAllocator allocator, ScheduledExecutorService executor) {
+        ByteBuf buf = allocator.buffer(1024 * 4);
         if (buf == null) {
             throw new IllegalStateException("bad alloc");
         }
 
+        this.groupId = groupId;
         this.id = id;
-        this.sequencer = group.sequencer();
+        this.timeout = timeout;
+        this.localId = localId;
 
-        this.ctx = new ProposeContext(buf, group.id(), group.local().id());
-        this.msg = new Propose();
-        this.msg.setGroupId(group.id());
+        this.sequencer = sequencer;
+        this.cache = cache;
+        this.configs = configs;
+        this.executor = executor;
+
+        this.ctx = new ProposeContext(buf, groupId, localId);
+        this.msg = new Proposing();
+        this.msg.setGroupId(groupId);
         this.msg.setProposerId(id);
 
-        int interval = group.options().retryInterval;
+        // int interval = group.options().retryInterval;
         // this.task = env.executor.scheduleWithFixedDelay(this::process, interval, interval, TimeUnit.MILLISECONDS);
+    }
+
+    public void setLimiter(Limiter limiter) {
+        this.limiter = limiter;
     }
 
     @Override
@@ -86,7 +96,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     public void commit(List<GenericCommit> commits) {
         if (isBusy()) {
             throw new IllegalStateException(
-                String.format("buggy, proposer(%d) in group(%d) is processing another proposal", id, group.id())
+                String.format("buggy, proposer(%d) in group(%d) is processing another proposal", id, groupId)
             );
         }
 
@@ -97,7 +107,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
         ctx.setCommits(commits);
         if (isDebug()) {
-            logger.trace("set a new learn({}) to proposer({}.{})", commits.size(), group.id(), id);
+            logger.trace("set a new learn({}) to proposer({}.{})", commits.size(), groupId, id);
         }
 
         /*
@@ -112,18 +122,10 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     }
 
     private void process() {
-        if (group.state() != PaxosGroup.State.RUNNING) {
-            /*
-             * fail commits if any
-             */
-            fail(CommitResult.CLOSED_GROUP);
-            return ;
-        }
-
         if (ctx.currentPhase().isReady()) {
             if (ctx.valueCache().isEmpty()) {
                 if (isDebug()) {
-                    logger.trace("nothing need to msg for proposer({}) of group({})", id, group.id());
+                    logger.trace("nothing need to msg for proposer({}) of group({})", id, groupId);
                 }
 
                 return ;
@@ -168,7 +170,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
         // try again if previous proposing is expired
         long duration = System.currentTimeMillis() - ctx.begin();
-        if (duration >= group.options().retryInterval) {
+        if (duration >= timeout) {
             /*
              * possible causes:
              *
@@ -182,7 +184,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
                     "msg instance({}) is expired, proposer({}/{}), ratio({}/{}), answered({})",
                     ctx.instanceId(),
                     id,
-                    group.id(),
+                    groupId,
                     "",
                     ctx.config().members().length,
                     ctx.counter().dumpAccepted()
@@ -196,9 +198,9 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     private void proposeWithoutPreparing() {
         ctx.acceptCounter().reset();
 
-        ctx.ballot().setNodeId(group.local().id());
+        ctx.ballot().setNodeId(localId);
         ctx.ballot().setSequence(0);
-        ctx.setCurrent(0, group.local().id(), ctx.myValue());
+        ctx.setCurrent(0, localId, ctx.myValue());
 
         propose();
     }
@@ -209,13 +211,6 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
         if (instanceId < 0) {
             throw new IllegalArgumentException("instance must be 0 or positive number, but given: " + instanceId);
-        }
-
-        GroupConfigs configs = group().configs();
-        if (configs == null) {
-            throw new IllegalStateException(
-                String.format("no configs in group(%s)", group().id())
-            );
         }
 
         return configs.match(instanceId);
@@ -231,17 +226,19 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         long instanceId = acquire();
 
         if (isDebug()) {
-            logger.trace("a free instance({}) for proposer({}) of group({})", instanceId, id, group.id());
+            logger.trace("a free instance({}) for proposer({}) of group({})", instanceId, id, groupId);
         }
 
-        if (group.isSlowDown(instanceId)) {
-            int times = ctx.delay();
+        if (limiter != null) {
+            if (limiter.isEnable(instanceId)) {
+                int times = ctx.delay();
 
-            if (isDebug()) {
-                logger.debug("delay({} times) again for instance({}), delay duration({}ms)", times, ctx.instanceId(), ctx.delayed());
+                if (isDebug()) {
+                    logger.debug("delay({} times) again for instance({}), delay duration({}ms)", times, ctx.instanceId(), ctx.delayed());
+                }
+
+                return false;
             }
-
-            return false;
         }
 
         // match a config based on acquired instance id, if no config
@@ -257,21 +254,17 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         }
 
         // init Paxos instance
-        PaxosInstance instance = group.cache().createIfAbsent(instanceId);
+        PaxosInstance instance = cache.createIfAbsent(instanceId);
         int holder = instance.hold(id);
         if (holder != id) {
-            fail(CommitResult.UNKNOWN_ERROR);
-
             String msg = String.format(
                 "proposer(%d) of group(%d) can't hold the instance(%d), it's hold by another one(%d)",
                 id,
-                group.id(),
+                groupId,
                 instanceId,
                 holder
             );
-            group.freeze(msg);
-
-            return false;
+            throw new IllegalStateException(msg);
         }
 
         sequencer.set(instanceId);
@@ -319,7 +312,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             ctx.clear();
 
             if (isDebug()) {
-                logger.info("the myValue of proposer({}) of group({}) is chosen, it's ready to msg next one", id, group.id());
+                logger.info("the myValue of proposer({}) of group({}) is chosen, it's ready to msg next one", id, groupId);
             }
 
             return ;
@@ -337,10 +330,6 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
          * match a sequence number for a new ctx, must ensure that
          * no ctx associated with the new sequence.
          */
-        InstanceCache cache = group.cache();
-        if (cache == null) {
-            throw new IllegalStateException(String.format("no cache in group(%d)", group.id()));
-        }
 
         int span = 0;
         long instanceId = sequencer.get();
@@ -364,7 +353,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         }
 
         if (span > 1 && isDebug()) {
-            logger.info("span {} instances for allocating a free instance({}) in proposer({}) of group({})", span, instanceId, id, group.id());
+            logger.info("span {} instances for allocating a free instance({}) in proposer({}) of group({})", span, instanceId, id, groupId);
         }
 
         return instanceId;
@@ -404,7 +393,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         if (newValue && isDebug()) {
             logger.debug(
                 "proposer({}.{}) seen a newer myValue({}/{}) for instance({}) from acceptor({}), replace old one({}/{})",
-                group.id(),
+                groupId,
                 id,
                 reply.getSequence(),
                 reply.getNodeId(),
@@ -431,7 +420,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
                     ctx.config().total(),
                     ctx.current().getSequence(),
                     ctx.current().getNodeId(),
-                    group.id(),
+                    groupId,
                     id
                 );
             }
@@ -449,7 +438,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         msg.setNodeId(ctx.ballot().getNodeId());
         msg.setValue(ctx.current().getValue());
         msg.setInstanceId(ctx.instanceId());
-        msg.setOp(Opcode.PROPOSE);
+        msg.setOp(Opcode.ACCEPT);
 
         broadcast(msg);
     }
@@ -479,10 +468,6 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     private boolean isIgnore(long instanceId, AcceptorReply reply) {
         Objects.requireNonNull(reply, "reply");
 
-        if (group.role() != PaxosGroup.Role.FORMAL) {
-            return true;
-        }
-
         if (instanceId != ctx.instanceId()) {
             if (isDebug()) {
                 logger.debug(
@@ -507,7 +492,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
                     AddressUtils.toString(reply.getAcceptorId()),
                     reply.getReplySequence(),
                     id,
-                    group.id(),
+                    groupId,
                     sequence
                 );
             }
@@ -539,7 +524,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             logger.debug(
                 "proposer({}/{}) starts to process reply({}) from acceptor({})",
                 id,
-                group.id(),
+                groupId,
                 reply.toString(),
                 AddressUtils.toString(reply.getAcceptorId())
             );
@@ -575,7 +560,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
                         majority,
                         ctx.instanceId(),
                         id,
-                        group.id()
+                        groupId
                     );
                 }
 
@@ -583,7 +568,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
                 ctx.setChooseBallot(ctx.ballot());
             }
         } else {
-            throw new IllegalStateException("buggy, unknown op: " + reply.op().name());
+            throw new IllegalStateException("buggy, unknown getOp: " + reply.getOp().name());
         }
     }
 
@@ -605,7 +590,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
                 reply.getSequence(),
                 reply.getNodeId(),
                 id,
-                group.id()
+                groupId
             );
         }
         ctx.setGreatestSeen(reply.getNodeId(), reply.getSequence());
@@ -620,7 +605,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
                     ctx.config().members().length,
                     ctx.instanceId(),
                     id,
-                    group.id()
+                    groupId
                 );
             }
 
@@ -640,12 +625,12 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         msg.setInstanceId(ctx.instanceId());
         msg.setNodeId(ctx.ballot().getNodeId());
         msg.setSequence(ctx.ballot().getSequence());
-        msg.setGroupId(group.id());
+        msg.setGroupId(groupId);
         msg.setOp(Opcode.COMMIT);
 
         ByteBuf value = ctx.current().getValue();
         if (value == null || value.readableBytes() == 0) {
-            msg.setType(Message.Type.EMPTY_OP);
+            // msg.setType(Message.Type.EMPTY_OP);
         }
 
         if (isDebug()) {
@@ -653,7 +638,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             logger.debug(
                 "choose value({}) proposed by {} for instance({}), acceptors({})",
                 (value == null ? "empty" : value.readableBytes()),
-                (proposer == group.local().id() ? "local" : AddressUtils.toString(proposer)),
+                (proposer == localId ? "local" : AddressUtils.toString(proposer)),
                 ctx.instanceId(),
                 ctx.acceptCounter().dumpAccepted()
             );

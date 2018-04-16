@@ -1,6 +1,6 @@
 package io.messaginglabs.reaver.group;
 
-import io.messaginglabs.reaver.com.DefaultServerConnector;
+import io.messaginglabs.reaver.com.RemoteServerConnector;
 import io.messaginglabs.reaver.com.NettyTransporter;
 import io.messaginglabs.reaver.com.ServerConnector;
 import io.messaginglabs.reaver.com.Transporter;
@@ -14,7 +14,6 @@ import io.messaginglabs.reaver.dsl.StateMachine;
 import io.messaginglabs.reaver.log.DefaultLogStorage;
 import io.messaginglabs.reaver.log.LogStorage;
 import io.messaginglabs.reaver.utils.AddressUtils;
-import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.util.ResourceLeakDetector;
@@ -24,9 +23,7 @@ import io.netty.util.internal.PlatformDependent;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.SocketException;
-import java.util.List;
 import java.util.Objects;
-import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -236,7 +233,7 @@ public class MultiPaxosBuilder implements PaxosBuilder {
             System.setProperty("io.netty.leakDetection.level", ResourceLeakDetector.Level.ADVANCED.name());
         }
         allocator = new PooledByteBufAllocator(useDirect);
-        connector = new DefaultServerConnector(-1, debug, transporter);
+        connector = new RemoteServerConnector(-1, debug, transporter);
     }
 
 }

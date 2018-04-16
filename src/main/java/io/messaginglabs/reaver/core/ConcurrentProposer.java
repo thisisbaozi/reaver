@@ -1,84 +1,127 @@
 package io.messaginglabs.reaver.core;
 
-import com.sun.xml.internal.ws.addressing.v200408.MemberSubmissionWsaServerTube;
 import io.messaginglabs.reaver.com.msg.AcceptorReply;
 import io.messaginglabs.reaver.com.msg.Message;
+import io.messaginglabs.reaver.config.GroupConfigs;
 import io.messaginglabs.reaver.dsl.Commit;
 import io.messaginglabs.reaver.dsl.CommitResult;
-import io.messaginglabs.reaver.dsl.PaxosGroup;
-import io.messaginglabs.reaver.group.InternalPaxosGroup;
-import io.messaginglabs.reaver.group.MultiPaxosGroup;
+import io.messaginglabs.reaver.utils.Parameters;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
-import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ParallelProposer extends AlgorithmParticipant implements Proposer {
+public class ConcurrentProposer extends AlgorithmParticipant implements Proposer {
 
-    private static final Logger logger = LoggerFactory.getLogger(ParallelProposer.class);
+    private static final Logger logger = LoggerFactory.getLogger(ConcurrentProposer.class);
 
-    private final Queue<GenericCommit> values;
-    private final int cacheCapacity;
-    private final int maxBatchSize;
+    private final int groupId;
+    private final long localId;
 
-    private final SerialProposer[] proposers;
+    // options
+    private int parallel = 10;
+    private int valueCacheCapacity = 1024;
+    private int maxBatchSize = 1024 * 1024 * 128;   // 128m
+    private int timeout = 3000; // 3 seconds
+    private int instanceCacheCapacity = 1024 * 4;
+    private int recycleInstancesSize = 32;
+
+    // components
+    private final Sequencer sequencer;
+    private final GroupConfigs configs;
+    private InstanceCache cache;
+    private ByteBufAllocator allocator;
+
+    private Queue<GenericCommit> values;
+    private SerialProposer[] proposers;
     private GenericCommit reserved = null;
 
-    /*
-     * for reducing memory footprint
-     */
+    private final ScheduledExecutorService executor;
     private final Runnable proposeTask = this::propose;
 
-    public ParallelProposer(int cacheCapacity, int maxBatchSize, int parallel, InternalPaxosGroup group) {
-        super(group);
-        if (cacheCapacity <= 0) {
-            throw new IllegalArgumentException("myValue cache capacity must greater than 0, but given " + cacheCapacity);
-        }
+    public ConcurrentProposer(int groupId,
+                            long localId,
+                            GroupConfigs configs,
+                            ScheduledExecutorService executor) {
+        this.groupId = groupId;
+        this.localId = localId;
 
-        if (maxBatchSize <= 1024) {
-            throw new IllegalArgumentException("batch size is too small, it must be greater than 1024");
-        }
+        this.configs = configs;
+        this.executor = executor;
+        this.allocator = ByteBufAllocator.DEFAULT;
 
-        if (parallel <= 0) {
-            throw new IllegalArgumentException("the number of proposers must be greater than 0");
-        }
+        this.sequencer = new IdSequencer();
+    }
 
+    public void setParallel(int parallel) {
+        this.parallel = Parameters.requireNotNegativeOrZero(parallel, "parallel");
+    }
+
+    public void setValueCacheCapacity(int valueCacheCapacity) {
+        this.valueCacheCapacity = Parameters.requireNotNegativeOrZero(valueCacheCapacity, "valueCacheCapacity");
+    }
+
+    public void setMaxBatchSize(int maxBatchSize) {
+        this.maxBatchSize = Parameters.requireNotNegativeOrZero(maxBatchSize, "maxBatchSize");
+    }
+
+    public void setTimeout(int timeout) {
+        this.timeout = Parameters.requireNotNegativeOrZero(timeout, "timeout");
+    }
+
+    public void setInstanceCacheCapacity(int instanceCacheCapacity) {
+        this.instanceCacheCapacity = Parameters.requireNotNegativeOrZero(instanceCacheCapacity, "instanceCacheCapacity");
+    }
+
+    public void setRecycleInstancesSize(int recycleInstancesSize) {
+        this.recycleInstancesSize = Parameters.requireNotNegativeOrZero(recycleInstancesSize, "recycleInstancesSize");
+    }
+
+    public void setAllocator(ByteBufAllocator allocator) {
+        this.allocator = Objects.requireNonNull(allocator, "allocator");
+    }
+
+    @Override
+    public void init() throws Exception {
         /*
          * a multi producer single consumer queue is a better choice.
          */
-        this.values = new ArrayBlockingQueue<>(cacheCapacity);
-        this.cacheCapacity = cacheCapacity;
-        this.maxBatchSize = maxBatchSize;
+        this.values = new ArrayBlockingQueue<>(valueCacheCapacity);
         this.proposers = new SerialProposer[parallel];
+        this.cache = new DefaultInstanceCache(instanceCacheCapacity, recycleInstancesSize);
 
         Consumer<SerialProposer> consumer = proposer -> {
             /*
-             * for avoiding some proposers are hungry
+             * notify parent proposer once a proposer is idle
              */
             proposeRightNow();
         };
 
         for (int i = 0; i < parallel; i++) {
-            this.proposers[i] = new DefaultSerialProposer(i, group);
+            this.proposers[i] = new DefaultSerialProposer(groupId, i, timeout, localId, cache, sequencer, configs, allocator, executor);
             this.proposers[i].observe(SerialProposer.State.FREE, consumer);
         }
     }
 
     @Override
-    public CommitResult commit(ByteBuf value, Object attachment) {
-        if (group().state() == PaxosGroup.State.FROZEN) {
-            return CommitResult.FROZEN_GROUP;
-        }
+    public Sequencer sequencer() {
+        return sequencer;
+    }
 
-        // wrap myValue and attachment with a learn
+    @Override
+    public InstanceCache cache() {
+        return cache;
+    }
+
+    @Override
+    public CommitResult commit(ByteBuf value, Object attachment) {
         GenericCommit commit = newCommit(value, attachment);
         return enqueue(commit) ? CommitResult.OK : CommitResult.PROPOSE_THROTTLE;
     }
@@ -86,11 +129,6 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
     @Override
     public Commit commit(ByteBuf value) {
         GenericCommit commit = newCommit(value, null);
-
-        if (group().state() == PaxosGroup.State.FROZEN) {
-            commit.setFailure(CommitResult.FROZEN_GROUP);
-            return commit;
-        }
 
         if (!enqueue(commit)) {
             commit.setFailure(CommitResult.PROPOSE_THROTTLE);
@@ -107,8 +145,8 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
              * the last one.
              */
             int times = 6;
-            if (times > cacheCapacity) {
-                times = cacheCapacity;
+            if (times > valueCacheCapacity) {
+                times = valueCacheCapacity;
             }
 
             for (;;) {
@@ -132,7 +170,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
 
         if (result) {
             if (!proposeRightNow()) {
-                logger.warn("can't execute proposing task in group({}), executor({})", group().id());
+                logger.warn("can't execute proposing task in group({}), executor({})", groupId);
             }
         }
 
@@ -140,8 +178,6 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
     }
 
     private boolean proposeRightNow() {
-        ExecutorService executor = group().env().executor;
-
         try {
             executor.execute(proposeTask);
         } catch (RejectedExecutionException cause) {
@@ -149,7 +185,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
              * too many tasks in this executor
              */
             if (logger.isDebugEnabled()) {
-                logger.error("can't execute propose task due to too many tasks in executor({})", group().id());
+                logger.error("can't execute propose task due to too many tasks in executor({})", groupId);
             }
 
             return false;
@@ -168,7 +204,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
                  * can't match a free proposer, try again later
                  */
                 if (logger.isDebugEnabled()) {
-                    logger.warn("can't match a free proposer from group({}), proposers({})", group().id(), dumpProposersState());
+                    logger.warn("can't match a free proposer from group({}), proposers({})", groupId, dumpProposersState());
                 }
 
                 // do statistics
@@ -189,7 +225,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
 
         if (proposer.isBusy()) {
             throw new IllegalStateException(
-                String.format("buggy, proposer(%s) of group(%s) is not free", proposer.toString(), group().id())
+                String.format("buggy, proposer(%s) of group(%s) is not free", proposer.toString(), groupId)
             );
         }
 
@@ -245,7 +281,7 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
 
     private boolean inBatch(GenericCommit commit) {
         /*
-         * There's only ValueCtx op can be proposed in batch.
+         * There's only ValueCtx getOp can be proposed in batch.
          */
         return commit.valueType().isAppData();
     }
@@ -255,12 +291,12 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
             /*
              * ignore it if a learn has been cancelled
              */
-            logger.debug("a learn({}) posted to group({}) is cancelled, ignore it", commit.toString(), group().id());
+            logger.debug("a learn({}) posted to group({}) is cancelled, ignore it", commit.toString(), groupId);
             return true;
         }
 
         if (commit.isDone()) {
-            logger.debug("a learn({}) posted to group({}) is done, ignore it", commit.toString(), group().id());
+            logger.debug("a learn({}) posted to group({}) is done, ignore it", commit.toString(), groupId);
             return true;
         }
 
@@ -303,10 +339,5 @@ public class ParallelProposer extends AlgorithmParticipant implements Proposer {
     @Override
     public boolean close(long timeout) {
         return false;
-    }
-
-    @Override
-    public InternalPaxosGroup group() {
-        return group;
     }
 }

@@ -8,6 +8,11 @@ import java.nio.ByteBuffer;
 
 public interface Proposer extends Participant {
 
+    void init() throws Exception;
+
+    Sequencer sequencer();
+    InstanceCache cache();
+
     Commit commit(ByteBuf value);
     CommitResult commit(ByteBuf value, Object attachment);
 

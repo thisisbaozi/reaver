@@ -2,6 +2,7 @@ package io.messaginglabs.reaver.com;
 
 import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.utils.AddressUtils;
+import io.messaginglabs.reaver.utils.NodeUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
@@ -54,7 +55,7 @@ public class RemoteServer extends AbstractReferenceCounted implements Server {
         this.port = port;
         this.debug = debug;
         this.transporter = bootstrap;
-        this.nodeId = AddressUtils.composite(ip, port);
+        this.nodeId = NodeUtils.unsignedId(ip, port);
 
         connect();
     }

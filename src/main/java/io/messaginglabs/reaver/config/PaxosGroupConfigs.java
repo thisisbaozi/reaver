@@ -2,13 +2,11 @@ package io.messaginglabs.reaver.config;
 
 import io.messaginglabs.reaver.com.LocalServer;
 import io.messaginglabs.reaver.com.Server;
-import io.messaginglabs.reaver.group.InternalPaxosGroup;
+import io.messaginglabs.reaver.com.ServerConnector;
 import io.messaginglabs.reaver.utils.ContainerUtils;
-import io.netty.buffer.ByteBuf;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,32 +20,31 @@ public class PaxosGroupConfigs implements GroupConfigs {
      */
     private static final int RESERVE_NUM = 2;
 
-    private final InternalPaxosGroup group;
+    private final int groupId;
+
     private final MetadataStorage storage;
-    private final LocalServer localServer;
+    private final Server localServer;
+    private final ServerConnector connector;
 
     /*
-     * configs are still usable, the element at 0 is oldest config, size - 1
+     * configs which are still usable, the element at 0 is oldest config, size - 1
      * is the current config.
      */
     private List<PaxosConfig> configs = new ArrayList<>();
 
-    public PaxosGroupConfigs(InternalPaxosGroup group) {
-        this(group, null);
-    }
-
-    public PaxosGroupConfigs(InternalPaxosGroup group, MetadataStorage storage) {
-        this.group = Objects.requireNonNull(group, "group");
-
+    public PaxosGroupConfigs(int groupId, Server localServer, ServerConnector connector, MetadataStorage storage) {
+        this.localServer = Objects.requireNonNull(localServer, "localServer");
+        this.connector = Objects.requireNonNull(connector, "connector");
+        this.groupId = groupId;
+        
         // do nothing when configs is changed if storage is null
         this.storage = storage;
-        this.localServer = new LocalServer(group);
         initConfigs();
     }
 
     private void initConfigs() {
         if (storage != null) {
-            configs.addAll(storage.fetch(group.id()));
+            configs.addAll(storage.fetch(groupId));
 
             /*
              * sorts configs order by begin instance id
@@ -64,7 +61,7 @@ public class PaxosGroupConfigs implements GroupConfigs {
             });
 
             if (logger.isInfoEnabled()) {
-                logger.info("init configs({}) of group({}) from storage", ContainerUtils.toString(configs, "configs"), group.id());
+                logger.info("init configs({}) of group({}) from storage", ContainerUtils.toString(configs, "configs"), groupId);
             }
         }
     }
@@ -75,7 +72,7 @@ public class PaxosGroupConfigs implements GroupConfigs {
 
         logger.info(
             "add new config to group({}), new config({}), active configs({})",
-            group.id(),
+            groupId,
             config.toString(),
             configs.size()
         );
@@ -113,10 +110,10 @@ public class PaxosGroupConfigs implements GroupConfigs {
         Server[] servers = new Server[copy.size()];
         for (Node member : copy) {
             Server server;
-            if (member.id() == group.local().id()) {
+            if (member.id() == localServer.nodeId()) {
                 server = localServer;
             } else {
-                server = group.env().connector.connect(member.getIp(), member.getPort());
+                server = connector.connect(member.getIp(), member.getPort());
             }
 
             if (server == null) {
@@ -128,7 +125,7 @@ public class PaxosGroupConfigs implements GroupConfigs {
         }
 
 
-        return new ImmutablePaxosConfig(group.id(), instanceId, beginId, copy.toArray(new Member[copy.size()]), servers);
+        return new ImmutablePaxosConfig(groupId, instanceId, beginId, copy.toArray(new Member[copy.size()]), servers);
     }
 
     private boolean isUsable(long instanceId, PaxosConfig config) {
@@ -153,7 +150,7 @@ public class PaxosGroupConfigs implements GroupConfigs {
 
         if (size == 0 || size <= reserve) {
             if (logger.isTraceEnabled()) {
-                logger.trace("no config of group({}) need to remove, reserve({}), configs({})", group.id(), reserve, size);
+                logger.trace("no config of group({}) need to remove, reserve({}), configs({})", groupId, reserve, size);
             }
 
             return Collections.emptyList();
@@ -178,7 +175,7 @@ public class PaxosGroupConfigs implements GroupConfigs {
 
         if (useless != null) {
             if (logger.isInfoEnabled()) {
-                logger.info("remove some configs({}) of group({}), reserves({})", ContainerUtils.toString(useless, "configs"), group.id(), configs.size());
+                logger.info("remove some configs({}) of group({}), reserves({})", ContainerUtils.toString(useless, "configs"), groupId, configs.size());
             }
 
             sync();
@@ -193,7 +190,6 @@ public class PaxosGroupConfigs implements GroupConfigs {
             return ;
         }
 
-        int groupId = group.id();
         try {
             storage.write(groupId, configs);
         } catch (Exception e) {
@@ -206,9 +202,6 @@ public class PaxosGroupConfigs implements GroupConfigs {
             if (logger.isErrorEnabled()) {
                 logger.error(msg, e);
             }
-
-            // freeze group
-            group.freeze(msg);
         }
     }
 

@@ -1,10 +1,10 @@
 package io.messaginglabs.reaver.core;
 
 import io.messaginglabs.reaver.com.msg.AcceptorReply;
-import io.messaginglabs.reaver.com.msg.Propose;
+import io.messaginglabs.reaver.com.msg.Proposing;
 
-public interface Acceptor extends Participant, AutoCloseable {
+public interface Acceptor extends Participant {
 
-    AcceptorReply process(Propose propose);
+    AcceptorReply process(Proposing propose);
 
 }

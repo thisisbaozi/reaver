@@ -9,19 +9,15 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class DefaultServerConnector extends AbstractReferenceCounted implements ServerConnector {
+public abstract class AbstractServerConnector extends AbstractReferenceCounted implements ServerConnector {
 
-    private static final Logger logger = LoggerFactory.getLogger(DefaultServerConnector.class);
+    private static final Logger logger = LoggerFactory.getLogger(AbstractServerConnector.class);
 
     private final int count;
     private final Map<String, List<Server>> servers;
-    private final boolean debug;
-    private final Transporter transporter;
 
-    public DefaultServerConnector(int count, boolean debug, Transporter transporter) {
+    public AbstractServerConnector(int count) {
         this.count = count;
-        this.debug = debug;
-        this.transporter = transporter;
         this.servers = new HashMap<>();
     }
 
@@ -64,12 +60,11 @@ public class DefaultServerConnector extends AbstractReferenceCounted implements 
             }
 
             if (server == null) {
-                server = new RemoteServer(ip, port, debug, transporter) {
-                    @Override
-                    protected void deallocate() {
-                        closeServer(this);
-                    }
-                };
+                server = newServer(ip, port);
+                if (server == null) {
+                    throw new IllegalStateException("buggy, can't init server");
+                }
+
                 servers.add(server);
             } else {
                 server.retain();
@@ -79,7 +74,7 @@ public class DefaultServerConnector extends AbstractReferenceCounted implements 
         }
     }
 
-    private void closeServer(Server server) {
+    protected void closeServer(Server server) {
         String address = server.address();
 
         if (server.refCnt() != 0) {
@@ -111,9 +106,10 @@ public class DefaultServerConnector extends AbstractReferenceCounted implements 
         }
     }
 
+    abstract protected Server newServer(String ip, int port);
+
     @Override
     public ReferenceCounted touch(Object hint) {
         return this;
     }
-
 }

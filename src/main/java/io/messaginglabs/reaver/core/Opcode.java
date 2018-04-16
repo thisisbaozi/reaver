@@ -2,7 +2,7 @@ package io.messaginglabs.reaver.core;
 
 public enum Opcode {
     PREPARE(1),
-    PROPOSE(2),
+    ACCEPT(2),
 
     PREPARE_REPLY(3),
     PREPARE_EMPTY_REPLY(4),
@@ -19,6 +19,7 @@ public enum Opcode {
     UNIFIED_BOOT(11),
     COMMIT(12),
     LEARN_CHOSEN_VALUE(13),
+    NEED_BOOT(14),
     ;
 
     public final int value;
@@ -40,9 +41,12 @@ public enum Opcode {
     }
 
     public boolean isPropose() {
-        return this == PROPOSE;
+        return this == ACCEPT;
     }
 
+    public boolean isNeedBoot() {
+        return this == NEED_BOOT;
+    }
 
     public static Opcode match(int value) {
         for (Opcode opcode : Opcode.values()) {

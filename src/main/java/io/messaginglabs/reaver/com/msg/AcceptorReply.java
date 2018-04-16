@@ -80,7 +80,7 @@ public class AcceptorReply extends Message {
     @Override
     public String toString() {
         return "AcceptorReply{" +
-            "op=" + op().name() +
+            "getOp=" + getOp().name() +
             ", groupId=" + getGroupId() +
             ", proposerId=" + proposerId +
             ", sequence=" + sequence +

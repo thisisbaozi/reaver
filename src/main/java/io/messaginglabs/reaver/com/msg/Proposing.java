@@ -2,7 +2,7 @@ package io.messaginglabs.reaver.com.msg;
 
 import io.netty.buffer.ByteBuf;
 
-public class Propose extends Message {
+public class Proposing extends Message {
 
     public enum Type {
         NORMAL(1),

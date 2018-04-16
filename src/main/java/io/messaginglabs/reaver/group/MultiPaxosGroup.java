@@ -2,16 +2,16 @@ package io.messaginglabs.reaver.group;
 
 import io.messaginglabs.reaver.com.Server;
 import io.messaginglabs.reaver.com.msg.AcceptorReply;
+import io.messaginglabs.reaver.com.msg.BootCommands;
 import io.messaginglabs.reaver.com.msg.CommitValue;
 import io.messaginglabs.reaver.com.msg.Message;
-import io.messaginglabs.reaver.com.msg.Propose;
+import io.messaginglabs.reaver.com.msg.Proposing;
 import io.messaginglabs.reaver.com.msg.Reconfigure;
 import io.messaginglabs.reaver.config.PaxosConfig;
 import io.messaginglabs.reaver.config.ConfigEventsListener;
 import io.messaginglabs.reaver.config.ConfigView;
 import io.messaginglabs.reaver.config.Member;
 import io.messaginglabs.reaver.config.MetadataStorage;
-import io.messaginglabs.reaver.config.PaxosGroupConfigs;
 import io.messaginglabs.reaver.core.Acceptor;
 import io.messaginglabs.reaver.core.Applier;
 import io.messaginglabs.reaver.core.DefaultInstanceCache;
@@ -22,10 +22,8 @@ import io.messaginglabs.reaver.core.Learner;
 import io.messaginglabs.reaver.config.GroupConfigs;
 import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.core.Opcode;
-import io.messaginglabs.reaver.core.ParallelAcceptor;
-import io.messaginglabs.reaver.core.ParallelProposer;
 import io.messaginglabs.reaver.core.PaxosInstance;
-import io.messaginglabs.reaver.core.InstanceSequencer;
+import io.messaginglabs.reaver.core.IdSequencer;
 import io.messaginglabs.reaver.core.Proposal;
 import io.messaginglabs.reaver.core.Proposer;
 import io.messaginglabs.reaver.core.Sequencer;
@@ -100,8 +98,8 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
         }
 
         this.ctx = new PaxosGroupCtx();
-        this.sequencer = new InstanceSequencer();
-        this.configs = new PaxosGroupConfigs(this, storage);
+        this.sequencer = new IdSequencer();
+        this.configs = null;
         this.cache = new DefaultInstanceCache(1024 * 4, Defines.CACHE_MAX_CAPACITY);
     }
 
@@ -180,18 +178,7 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
     }
 
     private void initParticipants() {
-        if (proposer == null) {
-            proposer = new ParallelProposer(
-                options.valueCacheCapacity,
-                options.batch,
-                options.pipeline,
-                this
-            );
-        }
 
-        if (acceptor == null) {
-            acceptor = new ParallelAcceptor(this);
-        }
     }
 
     private boolean isBoot(List<Node> members) {
@@ -477,40 +464,88 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
         dispatch(msg);
     }
 
+    private boolean recovered = false;
+
+    private void bootIfNecessary(long from) {
+        if (from != local().id() && !recovered) {
+            BootCommands commands = new BootCommands();
+            commands.setGroupId(id);
+            commands.setOp(Opcode.NEED_BOOT);
+
+            // todo: reply
+        }
+    }
+
     private void dispatch(Message msg) {
-        if (isConfig(msg.op())) {
+        if (isConfig(msg.getOp())) {
             processConfig((Reconfigure)msg);
         } else if (isLearner(msg)) {
             processLearner(msg);
         } else if (isAcceptor(msg)) {
-            // find the server
-            Propose propose = (Propose)msg;
-            PaxosConfig config = configs.match(propose.getInstanceId());
-            if (config == null) {
-                if (logger.isDebugEnabled()) {
-                    logger.warn(
-                        "acceptor in group({}) fall behind(current config={}), ignore message(instance={}) from proposer({})",
-                        id,
-                        configs.current().begin(),
-                        propose.getInstanceId(),
-                        AddressUtils.toString(propose.getNodeId())
-                    );
-                }
-                return ;
-            }
-
-            AcceptorReply reply = acceptor.process(propose);
-            if (reply != null) {
-                long proposerId = propose.getNodeId();
-                if (logger.isTraceEnabled()) {
-                    logger.trace("");
-                }
-
-                reply(proposerId, config, reply);
-            }
+            processAcceptor((Proposing)msg);
         } else if (isProposer(msg)) {
             proposer.process(msg);
+        } else if (isBootstrap(msg.getOp())) {
+
         }
+    }
+
+    private void processAcceptor(Proposing propose) {
+        bootIfNecessary(propose.getNodeId());
+
+        /*
+         * before processing the given proposal, two things needs to check:
+         *
+         * 0. this node is the member of the config
+         * 1. this node is a FORMAL participant
+         */
+        PaxosConfig config = configs.match(propose.getInstanceId());
+        if (config == null) {
+            if (logger.isDebugEnabled()) {
+                logger.warn(
+                    "acceptor in group({}) fall behind(current config={}), ignore message(instance={}) from proposer({})",
+                    id,
+                    configs.current().begin(),
+                    propose.getInstanceId(),
+                    AddressUtils.toString(propose.getNodeId())
+                );
+            }
+
+            return ;
+        }
+
+        if (role != Role.FORMAL) {
+            if (logger.isDebugEnabled()) {
+                logger.debug(
+                    "acceptor({}) in group({}) can't vote for any proposal, ignore proposal({})",
+                    role.name(),
+                    id,
+                    propose.getInstanceId()
+                );
+            }
+
+            return ;
+        }
+
+        AcceptorReply reply = acceptor.process(propose);
+        if (reply != null) {
+            long proposerId = propose.getNodeId();
+            if (logger.isTraceEnabled()) {
+                logger.trace(
+                    ""
+                );
+            }
+
+            reply(proposerId, config, reply);
+        }
+    }
+
+    private void createSnapshot(PaxosConfig config, long nodeId) {
+
+    }
+
+    private boolean isBootstrap(Opcode op) {
+        return op.isNeedBoot();
     }
 
     private boolean isProposer(Message msg) {
@@ -555,12 +590,12 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
     }
 
     private boolean isLearner(Message msg) {
-        return msg.op() == Opcode.COMMIT
-            || msg.op().isLearnChosenValue();
+        return msg.getOp() == Opcode.COMMIT
+            || msg.getOp().isLearnChosenValue();
     }
 
     private void processLearner(Message msg) {
-        if (msg.op() == Opcode.COMMIT) {
+        if (msg.getOp() == Opcode.COMMIT) {
             choose((CommitValue)msg);
         }
     }
@@ -744,11 +779,11 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
         // checks whether or not this current is able to process this request
         if (role != Role.FORMAL) {
             throw new IllegalStateException(
-                String.format("current in group(%d) is %s, it can't process reconfigure event(%s)", id, role.name(), msg.op().name())
+                String.format("current in group(%d) is %s, it can't process reconfigure event(%s)", id, role.name(), msg.getOp().name())
             );
         }
 
-        if (msg.op().isJoinGroup()) {
+        if (msg.getOp().isJoinGroup()) {
             memberJoin(msg);
         }
     }
@@ -857,9 +892,6 @@ public class MultiPaxosGroup implements InternalPaxosGroup {
             if (!proposer.close(timeout) && timeout > 0) {
                 logger.warn("can't close proposer({}) in specified time({})", id, timeout);
             }
-        }
-        if (acceptor != null) {
-            close(acceptor, String.format("acceptor of group(%d)", id));
         }
     }
 

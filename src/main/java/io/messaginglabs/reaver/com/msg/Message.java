@@ -13,6 +13,10 @@ public abstract class Message {
         this.op = op;
     }
 
+    public Opcode getOp() {
+        return op;
+    }
+
     public void setGroupId(int groupId) {
         this.groupId = groupId;
     }
@@ -21,12 +25,8 @@ public abstract class Message {
         return groupId;
     }
 
-    public Opcode op() {
-        return op;
-    }
-
     public boolean isPropose() {
-        return op == Opcode.PROPOSE;
+        return op == Opcode.ACCEPT;
     }
 
     public boolean isPrepare() {
@@ -38,19 +38,19 @@ public abstract class Message {
     }
 
     public boolean isPrepareReply() {
-        return op() == Opcode.PREPARE_REPLY;
+        return getOp() == Opcode.PREPARE_REPLY;
     }
 
     public boolean isEmptyPrepareReply() {
-        return op() == Opcode.PREPARE_EMPTY_REPLY;
+        return getOp() == Opcode.PREPARE_EMPTY_REPLY;
     }
 
     public boolean isPromiseAcceptProposal() {
-        return op() == Opcode.ACCEPT_REPLY;
+        return getOp() == Opcode.ACCEPT_REPLY;
     }
 
     public boolean isRefuseAcceptProposal() {
-        return op() == Opcode.REJECT_ACCEPT;
+        return getOp() == Opcode.REJECT_ACCEPT;
     }
 
     public final ByteBuf encode(ByteBuf src) {
@@ -98,7 +98,7 @@ public abstract class Message {
 
         Message msg;
         if (op.isPropose() || op.isPrepare()) {
-            msg = new Propose();
+            msg = new Proposing();
         } else if (op.isJoinGroup()) {
             msg = new Reconfigure();
         }else {

@@ -1,6 +1,7 @@
 package io.messaginglabs.reaver.config;
 
 import io.messaginglabs.reaver.utils.AddressUtils;
+import io.messaginglabs.reaver.utils.NodeUtils;
 
 public class Node {
 
@@ -35,7 +36,7 @@ public class Node {
 
     public long id() {
         if (id == 0) {
-            id = AddressUtils.composite(ip, port);
+            id = NodeUtils.unsignedId(ip, port);
         }
         return id;
     }

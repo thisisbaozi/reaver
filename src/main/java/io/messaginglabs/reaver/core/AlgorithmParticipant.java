@@ -2,24 +2,14 @@ package io.messaginglabs.reaver.core;
 
 import io.messaginglabs.reaver.debug.RunningEvent;
 import io.messaginglabs.reaver.debug.RunningEvents;
-import io.messaginglabs.reaver.group.InternalPaxosGroup;
-import java.util.Objects;
 
 public abstract class AlgorithmParticipant implements Participant {
-
-    /*
-     * the group this algorithm participant belongs to
-     */
-    protected final InternalPaxosGroup group;
 
     /*
      * the thread is response for processing
      */
     private Thread thread;
-
-    public AlgorithmParticipant(InternalPaxosGroup group) {
-        this.group = Objects.requireNonNull(group, "group");
-    }
+    private boolean debug = false;
 
     void inLoop() {
         if (isDebug()) {
@@ -38,13 +28,8 @@ public abstract class AlgorithmParticipant implements Participant {
     }
 
     @Override
-    public InternalPaxosGroup group() {
-        return group;
-    }
-
-    @Override
     public boolean isDebug() {
-        return group.env().debug;
+        return debug;
     }
 
     @Override
@@ -54,11 +39,7 @@ public abstract class AlgorithmParticipant implements Participant {
 
     @Override
     public void add(RunningEvent event) {
-        if (!isDebug()) {
-            throw new IllegalStateException(
-                String.format("group(%d) is not run in debug mode, can't add running events", group.id())
-            );
-        }
+
     }
 
 }

@@ -2,15 +2,8 @@ package io.messaginglabs.reaver.core;
 
 import io.messaginglabs.reaver.debug.RunningEvent;
 import io.messaginglabs.reaver.debug.RunningEvents;
-import io.messaginglabs.reaver.group.InternalPaxosGroup;
 
 public interface Participant {
-
-    /**
-     * Returns the Paxos group instance this participant belongs to, the instance
-     * will never be null.
-     */
-    InternalPaxosGroup group();
 
     /**
      * Returns true iff this participant run in debug mode, otherwise returns

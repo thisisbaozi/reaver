@@ -1,6 +1,6 @@
 package io.messaginglabs.reaver;
 
-import io.messaginglabs.reaver.com.DefaultServerConnector;
+import io.messaginglabs.reaver.com.RemoteServerConnector;
 import io.messaginglabs.reaver.com.NettyTransporter;
 import io.messaginglabs.reaver.com.RemoteServer;
 import io.messaginglabs.reaver.com.Server;
@@ -50,7 +50,7 @@ public class TestNetwork {
 
     @Test
     public void testConnect() throws Exception {
-        ServerConnector connector = new DefaultServerConnector(1, true, transporter);
+        ServerConnector connector = new RemoteServerConnector(1, true, transporter);
         Server server = connector.connect(ip, port);
         server.connect();
         Thread.sleep(100);
@@ -82,7 +82,7 @@ public class TestNetwork {
 
     @Test
     public void testReleaseServer() throws Exception {
-        ServerConnector connector = new DefaultServerConnector(-1, true, transporter);
+        ServerConnector connector = new RemoteServerConnector(-1, true, transporter);
         Server server = connector.connect(ip, port);
         server.connect();
         Thread.sleep(100);
@@ -98,7 +98,7 @@ public class TestNetwork {
         Assert.assertNull(connector.get(ip, port));
         connector.release();
 
-        connector = new DefaultServerConnector(1, true, transporter);
+        connector = new RemoteServerConnector(1, true, transporter);
         server = connector.connect(ip, port);
         server.connect();
 
@@ -114,7 +114,7 @@ public class TestNetwork {
 
     @Test
     public void testSendAndReconnect() throws Exception {
-        ServerConnector connector = new DefaultServerConnector(-1, true, transporter);
+        ServerConnector connector = new RemoteServerConnector(-1, true, transporter);
         Server server = connector.connect(ip, port);
         Reconfigure reconfigure = newReconfigure();
         server.send(reconfigure);
@@ -134,7 +134,7 @@ public class TestNetwork {
     @Test
     public void testConnectTimeoutAndDropMessages() throws Exception {
         String ip = "128.0.0.1";
-        ServerConnector connector = new DefaultServerConnector(-1, true, transporter);
+        ServerConnector connector = new RemoteServerConnector(-1, true, transporter);
         RemoteServer server = (RemoteServer)connector.connect(ip, port);
         server.set(1000, 12);
 
@@ -166,7 +166,7 @@ public class TestNetwork {
 
     @Test
     public void testConnectionRecover() throws Exception {
-        ServerConnector connector = new DefaultServerConnector(-1, true, transporter);
+        ServerConnector connector = new RemoteServerConnector(-1, true, transporter);
         RemoteServer server = (RemoteServer)connector.connect(ip, port);
         Thread.sleep(100);
         server.close();
