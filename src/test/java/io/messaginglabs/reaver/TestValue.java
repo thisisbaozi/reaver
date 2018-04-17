@@ -27,7 +27,7 @@ public class TestValue {
 
     @Test
     public void testCodec() throws Exception {
-        ByteBuffer value = MockUtils.makeValue();
+        ByteBuffer value = MockUtils.wrap();
         ByteBuf buffer = ByteBufAllocator.DEFAULT.directBuffer();
         Value.init(ValueType.APP_DATA, value, buffer);
 

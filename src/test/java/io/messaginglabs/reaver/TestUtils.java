@@ -3,7 +3,6 @@ package io.messaginglabs.reaver;
 import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.core.Ballot;
 import io.messaginglabs.reaver.core.BallotsCounter;
-import io.messaginglabs.reaver.utils.AddressUtils;
 import io.messaginglabs.reaver.utils.Crc32;
 import io.messaginglabs.reaver.utils.NodeUtils;
 import io.messaginglabs.reaver.utils.Strings;
@@ -96,7 +95,7 @@ public class TestUtils {
         String str = "Native method support for java.util.zip.CRC32";
         byte[] bytes = Strings.UTF8Bytes(str);
 
-        ByteBuffer buf0 = MockUtils.makeValue();
+        ByteBuffer buf0 = MockUtils.wrap();
         int checksum = Crc32.get(buf0);
         ByteBuffer buf1 = ByteBuffer.allocateDirect(bytes.length);
         buf1.put(bytes);

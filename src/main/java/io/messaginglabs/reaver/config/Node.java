@@ -1,6 +1,5 @@
 package io.messaginglabs.reaver.config;
 
-import io.messaginglabs.reaver.utils.AddressUtils;
 import io.messaginglabs.reaver.utils.NodeUtils;
 
 public class Node {

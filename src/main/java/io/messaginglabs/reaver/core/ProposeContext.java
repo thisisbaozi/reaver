@@ -38,8 +38,8 @@ public class ProposeContext {
      */
     private Proposal current = new Proposal();
 
-    // the id of Paxos instance this proposal associated with
-    private long instanceId = Defines.VOID_INSTANCE_ID;
+    // the Paxos instance this proposal associated with
+    private PaxosInstance instance;
 
     // the instance propose this proposal based on the config
     private PaxosConfig config;
@@ -75,7 +75,7 @@ public class ProposeContext {
 
         if (stage != PaxosStage.READY) {
             throw new IllegalStateException(
-                String.format("Paxos currentPhase is not ready(%s)", stage.name())
+                String.format("Paxos stage is not ready(%s)", stage.name())
             );
         }
 
@@ -98,9 +98,9 @@ public class ProposeContext {
         // 1. instance id
         // 2. the number of entries
         this.buffer.writeInt(groupId);
-        this.buffer.writeLong(instanceId);
+        this.buffer.writeLong(instance.id());
         this.buffer.writeLong(nodeId);
-        this.buffer.writeInt(this.commits.size());
+        this.buffer.writeInt(commits.size());
         int size = this.commits.size();
         for (int i = 0; i < size; i++) {
             GenericCommit commit = this.commits.get(i);
@@ -121,28 +121,27 @@ public class ProposeContext {
         }
     }
 
-    public void reset(long instanceId, PaxosConfig config) {
+    public void reset(PaxosInstance instance, PaxosConfig config) {
         if (commits.isEmpty()) {
             throw new IllegalArgumentException(
-                String.format("nothing needs to reach a consensus for instance(%d)", instanceId)
+                String.format("nothing needs to reach a consensus for instance(%d)", instance.id())
             );
         }
 
         // Checks whether or not there's already one proposal is in progress
-        if (this.instanceId != Defines.VOID_INSTANCE_ID) {
+        if (this.instance != null && this.instance.id() != Defines.VOID_INSTANCE_ID) {
             throw new IllegalStateException(
-                String.format("instance(%d) is in progress, can't propose a new one(%d)", this.instanceId, instanceId)
+                String.format("instance(%d) is in progress, can't propose a new one(%d)", this.instance.id(), instance.id())
             );
         }
 
-        this.mergeValue();
-
-        this.instanceId = instanceId;
+        this.instance = instance;
         this.config = config;
-
         this.begin = System.currentTimeMillis();
         this.end = 0;
         this.times = 0;
+
+        this.mergeValue();
     }
 
     public void clear() {
@@ -156,7 +155,7 @@ public class ProposeContext {
              * the acceptor made this reply has accepted a myValue, this proposer
              * should resolve the myValue first.
              */
-            if (current.getValue() != null) {
+            if (current.getValue() != null && current.getValue() != value) {
                 current.getValue().release();
             }
 
@@ -200,15 +199,11 @@ public class ProposeContext {
     }
 
     public long instanceId() {
-        return instanceId;
+        return instance == null ? Defines.VOID_INSTANCE_ID : instance.id();
     }
 
     public PaxosInstance instance() {
-        return null;
-    }
-
-    public void instanceId(long instanceId) {
-        this.instanceId = instanceId;
+        return instance;
     }
 
     public BallotsCounter counter() {
@@ -239,7 +234,7 @@ public class ProposeContext {
         return System.currentTimeMillis() - begin;
     }
 
-    public PaxosStage currentPhase() {
+    public PaxosStage stage() {
         return stage;
     }
 

@@ -13,7 +13,6 @@ public class ConcurrentAcceptor extends AlgorithmParticipant implements Acceptor
     private static final Logger logger = LoggerFactory.getLogger(ConcurrentProposer.class);
 
     private final int groupId;
-    private final long nodeId;
     private final InstanceCache cache;
 
     /*
@@ -23,17 +22,16 @@ public class ConcurrentAcceptor extends AlgorithmParticipant implements Acceptor
      */
     private final AcceptorReply reply;
 
-    public ConcurrentAcceptor(int groupId, long localId, InstanceCache cache) {
+    public ConcurrentAcceptor(int groupId, long nodeId, InstanceCache cache) {
         if (cache == null) {
             throw new IllegalArgumentException("buggy, group has no instances cache");
         }
 
         this.groupId = groupId;
-        this.nodeId = localId;
         this.cache = cache;
         this.reply = new AcceptorReply();
         this.reply.setGroupId(groupId);
-        this.reply.setAcceptorId(localId);
+        this.reply.setAcceptorId(nodeId);
     }
 
     private AcceptorReply processPrepare(Proposing msg, PaxosInstance instance) {

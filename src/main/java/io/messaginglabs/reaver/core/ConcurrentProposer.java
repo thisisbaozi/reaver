@@ -23,7 +23,7 @@ public class ConcurrentProposer extends AlgorithmParticipant implements Proposer
     private static final Logger logger = LoggerFactory.getLogger(ConcurrentProposer.class);
 
     private final int groupId;
-    private final long localId;
+    private final long nodeId;
 
     // options
     private int parallel = 10;
@@ -46,12 +46,9 @@ public class ConcurrentProposer extends AlgorithmParticipant implements Proposer
     private final ScheduledExecutorService executor;
     private final Runnable proposeTask = this::propose;
 
-    public ConcurrentProposer(int groupId,
-                            long localId,
-                            GroupConfigs configs,
-                            ScheduledExecutorService executor) {
+    public ConcurrentProposer(int groupId, long localId, GroupConfigs configs, ScheduledExecutorService executor) {
         this.groupId = groupId;
-        this.localId = localId;
+        this.nodeId = localId;
 
         this.configs = configs;
         this.executor = executor;
@@ -99,14 +96,16 @@ public class ConcurrentProposer extends AlgorithmParticipant implements Proposer
 
         Consumer<SerialProposer> consumer = proposer -> {
             /*
-             * notify parent proposer once a proposer is idle
+             * invoked once a proposer is ready to propose a new value.
              */
             proposeRightNow();
         };
 
         for (int i = 0; i < parallel; i++) {
-            this.proposers[i] = new DefaultSerialProposer(groupId, i, timeout, localId, cache, sequencer, configs, allocator, executor);
+            this.proposers[i] = new DefaultSerialProposer(groupId, i, nodeId, cache, sequencer, configs, allocator, executor);
+            this.proposers[i].setTimeout(timeout);
             this.proposers[i].observe(SerialProposer.State.FREE, consumer);
+            this.proposers[i].init();
         }
     }
 
@@ -123,21 +122,37 @@ public class ConcurrentProposer extends AlgorithmParticipant implements Proposer
     @Override
     public CommitResult commit(ByteBuf value, Object attachment) {
         GenericCommit commit = newCommit(value, attachment);
-        return enqueue(commit) ? CommitResult.OK : CommitResult.PROPOSE_THROTTLE;
+        return propose(commit) ? CommitResult.OK : CommitResult.PROPOSE_THROTTLE;
     }
 
     @Override
     public Commit commit(ByteBuf value) {
         GenericCommit commit = newCommit(value, null);
 
-        if (!enqueue(commit)) {
+        if (!propose(commit)) {
             commit.setFailure(CommitResult.PROPOSE_THROTTLE);
         }
 
         return commit;
     }
 
-    private boolean enqueue(GenericCommit commit) {
+    private boolean propose(GenericCommit commit) {
+        if (!enqueue(commit)) {
+            return false;
+        }
+
+        if (!proposeRightNow()) {
+            logger.warn("can't execute proposing task in group({}), executor({})", groupId);
+        }
+
+        return true;
+    }
+
+    public int getCommits() {
+        return values.size() + (reserved != null ? 1 : 0);
+    }
+
+    public boolean enqueue(GenericCommit commit) {
         boolean result = values.offer(commit);
         if (!result) {
             /*
@@ -165,12 +180,6 @@ public class ConcurrentProposer extends AlgorithmParticipant implements Proposer
                 if (times == 0) {
                     break;
                 }
-            }
-        }
-
-        if (result) {
-            if (!proposeRightNow()) {
-                logger.warn("can't execute proposing task in group({}), executor({})", groupId);
             }
         }
 
@@ -216,25 +225,12 @@ public class ConcurrentProposer extends AlgorithmParticipant implements Proposer
                 return ;
             }
 
-            process(proposer);
+            propose(proposer);
         }
     }
 
-    private void process(SerialProposer proposer) {
-        Objects.requireNonNull(proposer, "proposer");
-
-        if (proposer.isBusy()) {
-            throw new IllegalStateException(
-                String.format("buggy, proposer(%s) of group(%s) is not free", proposer.toString(), groupId)
-            );
-        }
-
-        if (values.isEmpty()) {
-            throw new IllegalStateException("no commits in buffer");
-        }
-
+    public int batch(List<GenericCommit> batch) {
         int bytes = 0;
-        List<GenericCommit> batch = proposer.valueCache();
         while (values.size() > 0) {
             GenericCommit commit;
             if (reserved != null) {
@@ -248,7 +244,7 @@ public class ConcurrentProposer extends AlgorithmParticipant implements Proposer
                 continue;
             }
 
-            if (!commit.setStage(Commit.Stage.PROPOSED)) {
+            if (commit.stage() != Commit.Stage.PROPOSED && !commit.setStage(Commit.Stage.PROPOSED)) {
                 if (!commit.isCancelled()) {
                     throw new IllegalStateException(String.format("learn(%s) is not cancelled", commit.toString()));
                 }
@@ -274,8 +270,28 @@ public class ConcurrentProposer extends AlgorithmParticipant implements Proposer
             bytes += commit.valueSize();
         }
 
-        if (!batch.isEmpty()) {
-            proposer.commit(batch);
+        return bytes;
+    }
+
+    private void propose(SerialProposer proposer) {
+        Objects.requireNonNull(proposer, "proposer");
+
+        if (proposer.isBusy()) {
+            throw new IllegalStateException(
+                String.format("buggy, proposer(%s) of group(%s) is not free", proposer.toString(), groupId)
+            );
+        }
+
+        if (values.isEmpty()) {
+            throw new IllegalStateException("no commits in buffer");
+        }
+
+        List<GenericCommit> buffer = proposer.valueCache();
+        int bytes = batch(buffer);
+        int count = buffer.size();
+
+        if (count > 0 && bytes > 0) {
+            proposer.commit(buffer);
         }
     }
 
@@ -307,7 +323,7 @@ public class ConcurrentProposer extends AlgorithmParticipant implements Proposer
         return null;
     }
 
-    private SerialProposer find() {
+    public SerialProposer find() {
         for (SerialProposer proposer : proposers) {
             if (!proposer.isBusy()) {
                 return proposer;
@@ -316,11 +332,14 @@ public class ConcurrentProposer extends AlgorithmParticipant implements Proposer
         return null;
     }
 
-    private GenericCommit newCommit(ByteBuf value, Object attachment) {
-        Objects.requireNonNull(value, "myValue");
+    public GenericCommit newCommit(ByteBuf value, Object attachment) {
+        Objects.requireNonNull(value, "value");
 
+        if (value.refCnt() == 0) {
+            throw new IllegalArgumentException("released value");
+        }
         if (value.readableBytes() == 0) {
-            throw new IllegalArgumentException("empty myValue is not allowed");
+            throw new IllegalArgumentException("empty value is not allowed");
         }
 
         return new GenericCommit(value, attachment);

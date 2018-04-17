@@ -26,7 +26,9 @@ public class Member extends Node {
     public String toString() {
         return "Member{" +
             ", minVersion=" + minVersion +
+            ", ip=" + getIp() +
+            ", port=" + getPort() +
             ", maxVersion=" + maxVersion +
-            "} " + super.toString();
+            "} ";
     }
 }

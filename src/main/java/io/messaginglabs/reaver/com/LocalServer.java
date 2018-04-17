@@ -14,14 +14,16 @@ public class LocalServer extends AbstractReferenceCounted implements Server {
     private final String address;
 
     public LocalServer(long localId, String address, Consumer<Message> consumer) {
-        this.consumer = Objects.requireNonNull(consumer, "consumer");
+        this.consumer = consumer;
         this.localId = localId;
         this.address = address;
     }
 
     @Override
     public void send(Message msg) {
-        consumer.accept(msg);
+        if (consumer != null) {
+            consumer.accept(msg);
+        }
     }
 
     @Override

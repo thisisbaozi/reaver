@@ -12,6 +12,10 @@ public interface SerialProposer {
         READY_TO_PREPARE,
     }
 
+    void init();
+
+    void setTimeout(int timeout);
+
     /**
      * Returns true iff this proposer is processing a proposal, otherwise returns
      * false.
