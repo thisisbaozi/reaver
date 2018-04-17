@@ -4,6 +4,7 @@ import io.messaginglabs.reaver.com.AbstractServerConnector;
 import io.messaginglabs.reaver.com.LocalServer;
 import io.messaginglabs.reaver.com.Server;
 import io.messaginglabs.reaver.com.ServerConnector;
+import io.messaginglabs.reaver.com.msg.AcceptorReply;
 import io.messaginglabs.reaver.com.msg.Message;
 import io.messaginglabs.reaver.com.msg.Proposing;
 import io.messaginglabs.reaver.config.Member;
@@ -12,6 +13,7 @@ import io.messaginglabs.reaver.config.PaxosGroupConfigs;
 import io.messaginglabs.reaver.core.ConcurrentProposer;
 import io.messaginglabs.reaver.core.DefaultSerialProposer;
 import io.messaginglabs.reaver.core.GenericCommit;
+import io.messaginglabs.reaver.core.Opcode;
 import io.messaginglabs.reaver.core.PaxosStage;
 import io.messaginglabs.reaver.core.ValueType;
 import io.messaginglabs.reaver.utils.AddressUtils;
@@ -60,6 +62,9 @@ public class TestProposer {
         };
 
         configs = new PaxosGroupConfigs(groupId, connector.connect(address, 9001), connector, null);
+        List<Member> members = MockUtils.mockMembers(9001, 9002, 9003);
+        configs.add(configs.build(1, 1, members));
+
         proposer = new ConcurrentProposer(groupId, id0, configs, Executors.newSingleThreadScheduledExecutor());
         proposer.setTimeout(timeout);
         proposer.init();
@@ -151,6 +156,7 @@ public class TestProposer {
         List<GenericCommit> cache = proposer.valueCache();
         Assert.assertTrue(this.proposer.batch(cache) > 1);
         Assert.assertTrue(proposer.setCommits(cache));
+        Assert.assertTrue(proposer.isBusy());
         Assert.assertTrue(proposer.hasValue());
         Assert.assertEquals(proposer.ready(), DefaultSerialProposer.Result.NO_CONFIG);
 
@@ -189,4 +195,101 @@ public class TestProposer {
         Assert.assertEquals(proposer.ctx().stage(), PaxosStage.PREPARE);
     }
 
+    @Test
+    public void testRejectPrepare() throws Exception {
+
+    }
+
+    @Test
+    public void testRejectAccept() throws Exception {
+        this.proposer.enqueue(this.proposer.newCommit(MockUtils.createValue("v0", ValueType.APP_DATA), null));
+        DefaultSerialProposer proposer = (DefaultSerialProposer)this.proposer.proposeOneValue();
+        proposer.disableTimeoutCheck();
+        Assert.assertNotNull(proposer);
+        Assert.assertEquals(proposer.ctx().stage(), PaxosStage.ACCEPT);
+        for (Server server : configs.match(1).servers()) {
+            ((MockLocalServer)server).messages.clear();
+        }
+
+        AcceptorReply reply = MockUtils.newReply(
+            configs.match(1).members()[0].id(),
+            0,
+            configs.match(1).members()[0].id(),
+            proposer.ctx().instanceId(),
+            Opcode.ACCEPT_REPLY
+        );
+
+        // pass
+        this.proposer.process(reply);
+        Assert.assertEquals(proposer.ctx().acceptCounter().nodesPromised(), 1);
+
+        // reject
+        reply.setOp(Opcode.REJECT_ACCEPT);
+        reply.setNodeId(configs.match(1).members()[1].id());
+        reply.setSequence(1);
+        reply.setAcceptorId(configs.match(1).members()[1].id());
+
+        Assert.assertTrue(proposer.ctx().stage().isAccept());
+
+        this.proposer.process(reply);
+        Assert.assertEquals(proposer.ctx().acceptCounter().nodesRejected(), 1);
+        Assert.assertEquals(proposer.ctx().getGreatestSeen().getSequence(), 1);
+
+        // reject
+        reply.setNodeId(configs.match(1).members()[2].id());
+        reply.setSequence(2);
+        reply.setAcceptorId(configs.match(1).members()[2].id());
+
+        this.proposer.process(reply);
+        Assert.assertTrue(proposer.ctx().stage().isPrepare());
+
+        for (Server server : configs.match(1).servers()) {
+            Opcode op = ((MockLocalServer)server).messages.poll().getOp();
+            Assert.assertTrue(op.isPrepare());
+        }
+    }
+
+    @Test
+    public void testPreparePass() throws Exception {
+        DefaultSerialProposer proposer = (DefaultSerialProposer)this.proposer.find();
+        proposer.disableTimeoutCheck();
+
+        this.proposer.enqueue(this.proposer.newCommit(MockUtils.createValue("v0", ValueType.APP_DATA), null));
+        this.proposer.batch(proposer.valueCache());
+        proposer.setCommits(proposer.valueCache());
+        Assert.assertEquals(proposer.ready(), DefaultSerialProposer.Result.READY);
+        proposer.accept();
+        long instanceId = proposer.ctx().instanceId();
+
+        for (Server server : configs.match(1).servers()) {
+            ((MockLocalServer)server).messages.clear();
+        }
+
+        // mock reply
+        AcceptorReply reply = MockUtils.newReply(
+            configs.match(1).members()[0].id(),
+            0,
+            configs.match(1).members()[0].id(),
+            instanceId,
+            Opcode.PREPARE_EMPTY_REPLY
+        );
+
+        proposer.process(reply);
+        Assert.assertEquals(proposer.ctx().counter().nodesPromised(), 1);
+
+        // duplicate reply
+        proposer.process(reply);
+        Assert.assertEquals(proposer.ctx().counter().nodesPromised(), 1);
+
+        reply.setAcceptorId(configs.match(1).members()[1].id());
+        proposer.process(reply);
+        Assert.assertEquals(proposer.ctx().counter().nodesPromised(), 2);
+
+        Assert.assertTrue(proposer.ctx().stage().isAccept());
+
+        for (Server server : configs.match(1).servers()) {
+            MockLocalServer mServer = (MockLocalServer)server;
+            Assert.assertEquals(mServer.messages.poll().getOp(), Opcode.ACCEPT);
+        }
+    }
 }

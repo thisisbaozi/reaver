@@ -20,4 +20,8 @@ public enum PaxosStage {
     public boolean isAccept() {
         return this == ACCEPT;
     }
+
+    public boolean isCommit() {
+        return this == COMMIT;
+    }
 }

@@ -4,8 +4,6 @@ import io.netty.buffer.ByteBuf;
 
 public class AcceptorReply extends Message {
 
-    private int proposerId;
-
     // proposal
     private int sequence;
     private long nodeId;
@@ -15,14 +13,6 @@ public class AcceptorReply extends Message {
 
     private long instanceId;
     private long acceptorId;
-
-    public int getProposerId() {
-        return proposerId;
-    }
-
-    public void setProposerId(int proposerId) {
-        this.proposerId = proposerId;
-    }
 
     public int getSequence() {
         return sequence;
@@ -82,7 +72,6 @@ public class AcceptorReply extends Message {
         return "AcceptorReply{" +
             "getOp=" + getOp().name() +
             ", groupId=" + getGroupId() +
-            ", proposerId=" + proposerId +
             ", sequence=" + sequence +
             ", nodeId=" + nodeId +
             ", myValue=" + value +

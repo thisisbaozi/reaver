@@ -203,30 +203,39 @@ public class ConcurrentProposer extends AlgorithmParticipant implements Proposer
         return true;
     }
 
-    private void propose() {
+    public void propose() {
         inLoop();
 
-        while (!values.isEmpty()) {
-            SerialProposer proposer = find();
-            if (proposer == null) {
-                /*
-                 * can't match a free proposer, try again later
-                 */
-                if (logger.isDebugEnabled()) {
-                    logger.warn("can't match a free proposer from group({}), proposers({})", groupId, dumpProposersState());
-                }
+        while (values.size() > 0) {
+            if (proposeOneValue() == null) {
+                break;
+            }
+        }
+    }
 
-                // do statistics
+    public SerialProposer proposeOneValue() {
+        assert (values.size() > 0);
 
-                /*
-                 * we don't know when there's a free proposer, proposers should
-                 * propose once they are free.
-                 */
-                return ;
+        SerialProposer proposer = find();
+        if (proposer == null) {
+            /*
+             * can't match a free proposer, try again later
+             */
+            if (logger.isDebugEnabled()) {
+                logger.warn("can't match a free proposer from group({}), proposers({})", groupId, dumpProposersState());
             }
 
-            propose(proposer);
+            // do statistics
+
+            /*
+             * we don't know when there's a free proposer, proposers should
+             * propose once they are free.
+             */
+            return null;
         }
+
+        propose(proposer);
+        return proposer;
     }
 
     public int batch(List<GenericCommit> batch) {
@@ -349,11 +358,38 @@ public class ConcurrentProposer extends AlgorithmParticipant implements Proposer
         Objects.requireNonNull(msg, "msg");
 
         AcceptorReply reply = (AcceptorReply)msg;
-        int proposerId = reply.getProposerId();
-        SerialProposer proposer = proposers[proposerId];
-        proposer.process(reply);
-    }
 
+        PaxosInstance instance = cache.get(reply.getInstanceId());
+        if (instance == null) {
+            if (logger.isDebugEnabled()) {
+                logger.debug(
+                    "can't find instance({}) in group({}), ignores reply",
+                    reply.getInstanceId(),
+                    msg.getGroupId()
+                );
+            }
+
+            return ;
+        }
+
+        int proposerId = instance.holder();
+        if (proposerId == -1) {
+            if (logger.isDebugEnabled()) {
+                logger.debug(
+                    "no proposer holds the instance({}), ignores reply",
+                    reply.getInstanceId()
+                );
+            }
+
+            return ;
+        }
+
+        if (proposerId < 0 || proposerId >= proposers.length) {
+            throw new IllegalStateException(String.format("no proposer(%d)", proposerId));
+        }
+
+        proposers[proposerId].process(reply);
+    }
 
     @Override
     public boolean close(long timeout) {

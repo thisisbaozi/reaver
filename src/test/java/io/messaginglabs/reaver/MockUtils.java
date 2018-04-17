@@ -1,8 +1,10 @@
 package io.messaginglabs.reaver;
 
+import io.messaginglabs.reaver.com.msg.AcceptorReply;
 import io.messaginglabs.reaver.config.Member;
 import io.messaginglabs.reaver.config.Node;
 import io.messaginglabs.reaver.core.Defines;
+import io.messaginglabs.reaver.core.Opcode;
 import io.messaginglabs.reaver.core.Value;
 import io.messaginglabs.reaver.core.ValueType;
 import io.messaginglabs.reaver.dsl.PaxosBuilder;
@@ -110,6 +112,17 @@ class MockUtils {
         }
 
         return members;
+    }
+
+    public static AcceptorReply newReply(long nodeId, int sequence, long acceptorId, long instanceId, Opcode code) {
+        AcceptorReply reply = new AcceptorReply();
+        reply.setNodeId(nodeId);
+        reply.setAcceptorId(acceptorId);
+        reply.setSequence(sequence);
+        reply.setOp(code);
+        reply.setInstanceId(instanceId);
+
+        return reply;
     }
 
 }

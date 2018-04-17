@@ -29,7 +29,7 @@ public class PaxosInstance extends AbstractReferenceCounted {
      * -1 means no one holds this instance, otherwise it's the id of
      * a proposer
      */
-    protected int holder;
+    protected int holder = -1;
 
     public void reset(long id) {
         this.id = id;
@@ -80,7 +80,11 @@ public class PaxosInstance extends AbstractReferenceCounted {
         }
 
         holder = proposerId;
-        return -1;
+        return proposerId;
+    }
+
+    public int holder() {
+        return holder;
     }
 
     public boolean isChosen() {

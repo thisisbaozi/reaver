@@ -93,7 +93,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
     @Override
     public boolean isBusy() {
-        return ctx.instanceId() != Defines.VOID_INSTANCE_ID;
+        return hasValue();
     }
 
     private void fail(List<GenericCommit> commits, CommitResult result) {
@@ -110,12 +110,6 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     }
 
     public boolean setCommits(List<GenericCommit> commits) {
-        if (isBusy()) {
-            throw new IllegalStateException(
-                String.format("buggy, proposer(%d) in group(%d) is processing another proposal", id, groupId)
-            );
-        }
-
         if (isClosed()) {
             fail(commits, CommitResult.CLOSED_GROUP);
             return false;
@@ -136,7 +130,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         }
 
         /*
-         * Now, this proposer will keep to propose a myValue composed of
+         * Now, this proposer will keep to commit a myValue composed of
          * the given commits until:
          *
          * 0. the value is chosen.
@@ -182,7 +176,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
             if (isDebug()) {
                 logger.trace(
-                    "starts to propose the myValue in phase({}), instance({}), proposal({}), commits({}), stage({}), config({})",
+                    "starts to commit the myValue in phase({}), instance({}), proposal({}), commits({}), stage({}), config({})",
                     ctx.phase().name(),
                     ctx.instanceId(),
                     ctx.ballot().toString(),
@@ -264,7 +258,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         ctx.setCurrent(0, localId, ctx.myValue());
         ctx.begin(PaxosStage.ACCEPT);
 
-        propose();
+        commit();
     }
 
     public PaxosConfig find(long instanceId) {
@@ -443,7 +437,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         }
 
         if (reply.isRejectPrepare()) {
-            processReject(reply);
+            processReject(reply, ctx.counter());
             return ;
         }
 
@@ -489,15 +483,15 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
                 );
             }
 
-            ctx.acceptCounter().reset();
+            ctx.setAcceptStage();
             ctx.accept().setSequence(ctx.current().getSequence());
             ctx.accept().setNodeId(ctx.current().getNodeId());
 
-            propose();
+            commit();
         }
     }
 
-    private void propose() {
+    private void commit() {
         msg.setSequence(ctx.ballot().getSequence());
         msg.setNodeId(ctx.ballot().getNodeId());
         msg.setValue(ctx.current().getValue());
@@ -611,9 +605,9 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
             return ;
         }
 
-        BallotsCounter counter = ctx.counter();
+        BallotsCounter counter = ctx.acceptCounter();
         if (reply.isRefuseAcceptProposal()) {
-            processReject(reply);
+            processReject(reply, counter);
         } else if (reply.isPromiseAcceptProposal()) {
             counter.countPromised(reply.getAcceptorId());
 
@@ -645,8 +639,8 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         }
     }
 
-    private void processReject(AcceptorReply reply) {
-        ctx.counter().countRejected(reply.getAcceptorId());
+    private void processReject(AcceptorReply reply, BallotsCounter counter) {
+        counter.countRejected(reply.getAcceptorId());
 
         Ballot ballot = ctx.getGreatestSeen();
         if (isDebug()) {
@@ -669,7 +663,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         ctx.setGreatestSeen(reply.getNodeId(), reply.getSequence());
 
         int majority = ctx.config().majority();
-        int count = ctx.counter().nodesRejected();
+        int count = counter.nodesRejected();
         if (count > majority) {
             if (isDebug()) {
                 logger.debug(
@@ -687,8 +681,6 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     }
 
     private void nextRound() {
-        assert (isExpired());
-
         ctx.counter().reset();
         ctx.acceptCounter().reset();
         ctx.setPhase(AlgorithmPhase.THREE_PHASE);

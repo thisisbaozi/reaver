@@ -14,10 +14,12 @@ public class ProposeContext {
     private long commit;
 
     /*
-     * begin: when this proposal propose
+     * timePropose: when this proposal propose
      * end: when this proposal completed
      */
-    private long begin;
+    private long timePropose;
+    private long timeAccept;
+    private long timeCommit;
     private long end;
 
     /*
@@ -137,7 +139,7 @@ public class ProposeContext {
 
         this.instance = instance;
         this.config = config;
-        this.begin = System.currentTimeMillis();
+        this.timePropose = System.currentTimeMillis();
         this.end = 0;
         this.times = 0;
 
@@ -215,23 +217,33 @@ public class ProposeContext {
     }
 
     public void begin(PaxosStage stage) {
-        this.begin = System.currentTimeMillis();
+        this.timePropose = System.currentTimeMillis();
         this.stage = stage;
     }
 
+    public void setAcceptStage() {
+        this.stage = PaxosStage.ACCEPT;
+        this.timeAccept = System.currentTimeMillis();
+    }
+
+    public void commit() {
+        this.stage = PaxosStage.COMMIT;
+        this.timeCommit = System.currentTimeMillis();
+    }
+
     public long begin() {
-        return begin;
+        return timePropose;
     }
 
     public long delayed() {
-        if (begin == 0) {
+        if (timePropose == 0) {
             /*
              * nothing propose
              */
             return -1;
         }
 
-        return System.currentTimeMillis() - begin;
+        return System.currentTimeMillis() - timePropose;
     }
 
     public PaxosStage stage() {
