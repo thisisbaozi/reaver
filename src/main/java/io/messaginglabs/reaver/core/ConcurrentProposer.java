@@ -32,6 +32,7 @@ public class ConcurrentProposer extends AlgorithmParticipant implements Proposer
     private int timeout = 3000; // 3 seconds
     private int instanceCacheCapacity = 1024 * 4;
     private int recycleInstancesSize = 32;
+    private boolean acceptDirectly = true;
 
     // components
     private final Sequencer sequencer;
@@ -85,6 +86,16 @@ public class ConcurrentProposer extends AlgorithmParticipant implements Proposer
         this.allocator = Objects.requireNonNull(allocator, "allocator");
     }
 
+    public void setAcceptDirectly(boolean acceptDirectly) {
+        this.acceptDirectly = acceptDirectly;
+
+        if (this.proposers != null) {
+            for (SerialProposer proposer : proposers) {
+                proposer.setAcceptDirectly(acceptDirectly);
+            }
+        }
+    }
+
     @Override
     public void init() throws Exception {
         /*
@@ -105,6 +116,7 @@ public class ConcurrentProposer extends AlgorithmParticipant implements Proposer
             this.proposers[i] = new DefaultSerialProposer(groupId, i, nodeId, cache, sequencer, configs, allocator, executor);
             this.proposers[i].setTimeout(timeout);
             this.proposers[i].observe(SerialProposer.State.FREE, consumer);
+            this.proposers[i].setAcceptDirectly(acceptDirectly);
             this.proposers[i].init();
         }
     }
@@ -187,6 +199,11 @@ public class ConcurrentProposer extends AlgorithmParticipant implements Proposer
     }
 
     private boolean proposeRightNow() {
+        if (executor == null) {
+            proposeTask.run();
+            return true;
+        }
+
         try {
             executor.execute(proposeTask);
         } catch (RejectedExecutionException cause) {

@@ -17,7 +17,7 @@ public class TestUtils {
     @Test
     public void testVoterCounter() throws Exception {
         BallotsCounter counter = new BallotsCounter();
-        Assert.assertEquals(counter.nodesPromised(), 0);
+        Assert.assertEquals(counter.nodesAccepted(), 0);
 
         String ip = "128.0.0.1";
         Node node0 = new Node(ip, 5000);
@@ -26,7 +26,7 @@ public class TestUtils {
         Node node3 = new Node(ip, 5003);
 
         counter.countPromised(node0.id());
-        Assert.assertEquals(counter.nodesPromised(), 1);
+        Assert.assertEquals(counter.nodesAccepted(), 1);
         Assert.assertEquals(counter.nodesRejected(), 0);
 
         System.out.println(counter.dumpAccepted());
@@ -34,31 +34,31 @@ public class TestUtils {
 
         counter.countPromised(node1.id());
 
-        Assert.assertEquals(counter.nodesPromised(), 2);
+        Assert.assertEquals(counter.nodesAccepted(), 2);
         Assert.assertEquals(counter.nodesRejected(), 0);
 
         System.out.println(counter.dumpAccepted());
 
         counter.countRejected(node2.id());
-        Assert.assertEquals(counter.nodesPromised(), 2);
+        Assert.assertEquals(counter.nodesAccepted(), 2);
         Assert.assertEquals(counter.nodesRejected(), 1);
         System.out.println(counter.dumpAccepted());
         System.out.println(counter.dumpRejected());
 
         counter.countPromised(node3.id());
-        Assert.assertEquals(counter.nodesPromised(), 3);
+        Assert.assertEquals(counter.nodesAccepted(), 3);
         Assert.assertEquals(counter.nodesRejected(), 1);
         System.out.println(counter.dumpAccepted());
         System.out.println(counter.dumpRejected());
 
         counter.reset();
-        Assert.assertEquals(counter.nodesPromised(), 0);
+        Assert.assertEquals(counter.nodesAccepted(), 0);
         Assert.assertEquals(counter.nodesRejected(), 0);
         Assert.assertEquals(counter.nodesAnswered(), 0);
 
         counter.countPromised(node0.id());
         counter.countPromised(node0.id());
-        Assert.assertEquals(counter.nodesPromised(), 1);
+        Assert.assertEquals(counter.nodesAccepted(), 1);
         Assert.assertEquals(counter.nodesRejected(), 0);
 
         long nodeId = counter.at(0);

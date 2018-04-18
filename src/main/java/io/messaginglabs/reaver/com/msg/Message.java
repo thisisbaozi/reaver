@@ -41,6 +41,10 @@ public abstract class Message {
         return getOp() == Opcode.PREPARE_REPLY;
     }
 
+    public boolean isCommit() {
+        return op == Opcode.COMMIT;
+    }
+
     public boolean isEmptyPrepareReply() {
         return getOp() == Opcode.PREPARE_EMPTY_REPLY;
     }

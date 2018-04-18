@@ -80,7 +80,7 @@ public class BallotsCounter {
         return parseCount(nodesRejected);
     }
 
-    public int nodesPromised() {
+    public int nodesAccepted() {
         return parseCount(nodesPromised);
     }
 

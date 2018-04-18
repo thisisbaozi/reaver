@@ -30,7 +30,6 @@ public class ProposeContext {
 
     private PaxosStage stage = PaxosStage.READY;
 
-
     private List<GenericCommit> commits = new ArrayList<>();
     private final ByteBuf buffer;
 
@@ -161,7 +160,7 @@ public class ProposeContext {
                 current.getValue().release();
             }
 
-            current.setValue(Parameters.requireNotEmpty(value));
+            current.setValue(value);
             current.setSequence(sequence);
             current.setNodeId(nodeId);
 
@@ -226,7 +225,7 @@ public class ProposeContext {
         this.timeAccept = System.currentTimeMillis();
     }
 
-    public void commit() {
+    public void enterCommit() {
         this.stage = PaxosStage.COMMIT;
         this.timeCommit = System.currentTimeMillis();
     }

@@ -15,6 +15,7 @@ public interface SerialProposer {
     void init();
 
     void setTimeout(int timeout);
+    void setAcceptDirectly(boolean enable);
 
     /**
      * Returns true iff this proposer is processing a proposal, otherwise returns

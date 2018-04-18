@@ -33,6 +33,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     private int timeout = 1000;
     private Limiter limiter;
     private Future<?> future;
+    private boolean acceptDirectly = true;
 
     /*
      * the task is response for checking whether or not a proposal is
@@ -75,15 +76,23 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
     @Override
     public void init() {
-        this.future = executor.scheduleWithFixedDelay(this::process, timeout, timeout, TimeUnit.MILLISECONDS);
+        if (executor != null) {
+            future = executor.scheduleWithFixedDelay(this::process, timeout, timeout, TimeUnit.MILLISECONDS);
+        }
     }
 
+    @Override
     public void setTimeout(int timeout) {
         this.timeout = timeout;
     }
 
     public void setLimiter(Limiter limiter) {
         this.limiter = limiter;
+    }
+
+    @Override
+    public void setAcceptDirectly(boolean enable) {
+        this.acceptDirectly = enable;
     }
 
     @Override
@@ -186,7 +195,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
                 );
             }
 
-            if (ctx.phase() == AlgorithmPhase.TWO_PHASE) {
+            if (acceptDirectly) {
                 accept();
             } else {
                 prepare();
@@ -424,7 +433,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
     @Override
     public void process(AcceptorReply reply) {
-        if (reply.isPrepareReply() || reply.isEmptyPrepareReply()) {
+        if (reply.isPrepareReply() || reply.isEmptyPrepareReply() || reply.isRejectPrepare()) {
             processPrepareReply(reply);
         } else if (reply.isPromiseAcceptProposal() || reply.isRefuseAcceptProposal()) {
             processAcceptReply(reply);
@@ -469,7 +478,7 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
     private void proposeIfEnough() {
         int majority = ctx.config().majority();
-        int count = ctx.counter().nodesPromised();
+        int count = ctx.counter().nodesAccepted();
         if (count > majority) {
             if (isDebug()) {
                 logger.trace(
@@ -611,20 +620,18 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         } else if (reply.isPromiseAcceptProposal()) {
             counter.countPromised(reply.getAcceptorId());
 
-            // choose the myValue if a majority of acceptors in the config has
+            // choose the value if a majority of acceptors in the config has
             // promised for the proposal this proposer sent.
             Ballot.CompareResult result = ctx.choose().compare(reply.getSequence(), reply.getNodeId());
-            if (result.isSmaller() || result.isGreater()) {
+            if (result.isEquals() || result.isGreater()) {
                 return ;
             }
 
-            int majority = ctx.config().majority();
-            int count = counter.nodesPromised();
-            if (count > majority) {
+            if (majorityAcceptorAccepted()) {
                 if (isDebug()) {
                     logger.debug(
                         "a majority of acceptors({}) have promised to instance({}) of proposer({}/{})",
-                        majority,
+                        ctx.config().majority(),
                         ctx.instanceId(),
                         id,
                         groupId
@@ -637,6 +644,12 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         } else {
             throw new IllegalStateException("buggy, unknown getOp: " + reply.getOp().name());
         }
+    }
+
+    public boolean majorityAcceptorAccepted() {
+        int majority = ctx.config().majority();
+        int count = ctx.acceptCounter().nodesAccepted();
+        return count > majority;
     }
 
     private void processReject(AcceptorReply reply, BallotsCounter counter) {
@@ -689,6 +702,12 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
     }
 
     private void chooseValue() {
+        assert (hasValue());
+        assert (majorityAcceptorAccepted());
+        assert (ctx.stage().isAccept());
+
+        ctx.enterCommit();
+
         CommitValue msg = new CommitValue();
         msg.setInstanceId(ctx.instanceId());
         msg.setNodeId(ctx.ballot().getNodeId());
@@ -696,16 +715,10 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         msg.setGroupId(groupId);
         msg.setOp(Opcode.COMMIT);
 
-        ByteBuf value = ctx.current().getValue();
-        if (value == null || value.readableBytes() == 0) {
-            // msg.setType(Message.Type.EMPTY_OP);
-        }
-
         if (isDebug()) {
             long proposer = ctx.current().getNodeId();
             logger.debug(
-                "choose value({}) proposed by {} for instance({}), acceptors({})",
-                (value == null ? "empty" : value.readableBytes()),
+                "choose value proposed by {} for instance({}), acceptors({})",
                 (proposer == localId ? "local" : AddressUtils.toString(proposer)),
                 ctx.instanceId(),
                 ctx.acceptCounter().dumpAccepted()
@@ -715,13 +728,6 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
         broadcast(msg);
     }
 
-    public void disableTimeoutCheck() {
-        if (future != null) {
-            if (!future.isCancelled()) {
-                future.cancel(false);
-            }
-        }
-    }
 
     public ProposeContext ctx() {
         return ctx;
@@ -729,7 +735,11 @@ public class DefaultSerialProposer extends AlgorithmParticipant implements Seria
 
     @Override
     public void close() {
-        disableTimeoutCheck();
+        if (future != null) {
+            if (!future.isCancelled()) {
+                future.cancel(false);
+            }
+        }
 
         ByteBuf value = ctx.myValue();
         if (value != null) {
