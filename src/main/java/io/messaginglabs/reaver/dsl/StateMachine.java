@@ -14,7 +14,7 @@ public interface StateMachine {
     /**
      * Failed to propose the learn
      */
-    void process(CommitResult cause, ValueCtx value);
+    void process(CommitResult cause, ChosenValue value);
 
     /**
      * processing critical errors, it's notified while a error taken

@@ -46,6 +46,10 @@ public class GenericCommit extends ArrayList<GenericCommit.Pair> implements Comm
         this.stage = Stage.READY;
     }
 
+    public Object attachment() {
+        return attachment;
+    }
+
     @Override
     public Stage stage() {
         return stage;

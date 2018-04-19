@@ -323,7 +323,7 @@ public class ConcurrentProposer extends AlgorithmParticipant implements Proposer
 
     private boolean inBatch(GenericCommit commit) {
         /*
-         * There's only ValueCtx getOp can be proposed in batch.
+         * There's only ChosenValue getOp can be proposed in batch.
          */
         return commit.valueType().isAppData();
     }

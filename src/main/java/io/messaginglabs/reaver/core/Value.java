@@ -75,4 +75,8 @@ public class Value {
         return header >> (Integer.SIZE - Value.SIZE_BITS);
     }
 
+
+    public ByteBuf appData() {
+        return null;
+    }
 }

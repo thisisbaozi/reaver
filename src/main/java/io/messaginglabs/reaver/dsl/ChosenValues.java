@@ -1,8 +1,6 @@
 package io.messaginglabs.reaver.dsl;
 
-import java.util.Iterator;
-
-public interface ChosenValues extends Iterator<ValueCtx> {
+public interface ChosenValues {
 
     /**
      * Returns the id of this instance, the id is unique absolutely in a group.
@@ -13,5 +11,10 @@ public interface ChosenValues extends Iterator<ValueCtx> {
      * Returns the number of chosen values in this batch.
      */
     int size();
+
+    /**
+     * Returns the value at the specified position in this value batch.
+     */
+    ChosenValue get(int idx);
 
 }

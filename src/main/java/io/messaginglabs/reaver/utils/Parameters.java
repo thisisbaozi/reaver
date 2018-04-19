@@ -36,14 +36,14 @@ public final class Parameters {
     }
 
     public static ByteBuf requireNotEmpty(ByteBuf buf) {
-        Objects.requireNonNull(buf, "buf");
+        Objects.requireNonNull(buf, "data");
 
         if (buf.refCnt() == 0) {
-            throw new IllegalArgumentException("released buf");
+            throw new IllegalArgumentException("released data");
         }
 
         if (buf.readableBytes() == 0) {
-            throw new IllegalArgumentException("empty buf");
+            throw new IllegalArgumentException("empty data");
         }
 
         return buf;

@@ -6,7 +6,7 @@ import io.messaginglabs.reaver.dsl.PaxosError;
 import io.messaginglabs.reaver.dsl.Snapshot;
 import io.messaginglabs.reaver.dsl.SnapshotBuilder;
 import io.messaginglabs.reaver.dsl.StateMachine;
-import io.messaginglabs.reaver.dsl.ValueCtx;
+import io.messaginglabs.reaver.dsl.ChosenValue;
 import java.util.Iterator;
 
 public class EmptyStateMachine implements StateMachine {
@@ -14,7 +14,7 @@ public class EmptyStateMachine implements StateMachine {
 
     }
 
-    @Override public void process(CommitResult cause, ValueCtx value) {
+    @Override public void process(CommitResult cause, ChosenValue value) {
 
     }
 
